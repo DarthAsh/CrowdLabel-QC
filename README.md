@@ -19,7 +19,6 @@ pip install qcc
 
 ```bash
 # Run quality control analysis
-qcc run --in data/assignments.csv --out reports/ --config config/default.yml
 ```
 
 ## Development
