@@ -25,20 +25,7 @@ qcc run --in data/assignments.csv --out reports/ --config config/default.yml
 ## Development
 
 ```bash
-# Install development dependencies
-pip install -e ".[dev]"
 
-# Run tests
-pytest
-
-# Format code
-black src/ tests/
-ruff check src/ tests/
-
-# Run pre-commit hooks
-pre-commit run --all-files
 ```
 
 ## License
-
-MIT License - see LICENSE file for details.
