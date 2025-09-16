@@ -29,46 +29,55 @@ class Characteristic:
     def __post_init__(self) -> None:
         """Initialize default domain if not provided."""
         if self.domain is None:
-            object.__setattr__(self, 'domain', [TagValue.YES, TagValue.NO, TagValue.NA])
+            object.__setattr__(
+                self,
+                "domain",
+                [
+                    TagValue.YES,
+                    TagValue.NO,
+                    TagValue.NA,
+                    TagValue.UNCERTAIN,
+                    TagValue.SKIP,
+                ],
+            )
     
     def num_unique_taggers(self, tagassignments: Iterable[TagAssignment]) -> int:
-        """Count the number of unique taggers for this characteristic.
-        
-        Args:
-            tagassignments: Iterable of tag assignments to filter
-            
-        Returns:
-            Number of unique taggers who have tagged this characteristic
-            
-        Complexity: O(n) where n is the number of tag assignments
-        """
-        # TODO: Implement filtering and counting logic
-        raise NotImplementedError("num_unique_taggers not yet implemented")
+        """Count the number of unique taggers for this characteristic."""
+        unique_taggers = {
+            ta.tagger_id for ta in tagassignments if ta.characteristic_id == self.id
+        }
+        return len(unique_taggers)
     
     def agreement_overall(self, tagassignments: Iterable[TagAssignment]) -> float:
         """Calculate overall agreement for this characteristic.
         
-        Args:
-            tagassignments: Iterable of tag assignments to analyze
-            
-        Returns:
-            Agreement score between 0.0 and 1.0
-            
-        Complexity: O(n²) where n is the number of tag assignments
+        Agreement = (# agreeing pairs) / (# total pairs).
+        Returns 0.0 if fewer than 2 assignments exist.
         """
-        # TODO: Implement agreement calculation logic
-        raise NotImplementedError("agreement_overall not yet implemented")
+        filtered = [ta for ta in tagassignments if ta.characteristic_id == self.id]
+        n = len(filtered)
+        if n < 2:
+            return 0.0
+        
+        agree_pairs = 0
+        total_pairs = 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                total_pairs += 1
+                if filtered[i].value == filtered[j].value:
+                    agree_pairs += 1
+        
+        return agree_pairs / total_pairs if total_pairs > 0 else 0.0
     
     def prevalence(self, tagassignments: Iterable[TagAssignment]) -> dict[TagValue, float]:
-        """Calculate the prevalence of each tag value for this characteristic.
+        """Calculate the prevalence of each tag value for this characteristic."""
+        filtered = [ta for ta in tagassignments if ta.characteristic_id == self.id]
+        total = len(filtered)
+        if total == 0:
+            return {value: 0.0 for value in self.domain}
         
-        Args:
-            tagassignments: Iterable of tag assignments to analyze
-            
-        Returns:
-            Dictionary mapping tag values to their prevalence (0.0 to 1.0)
-            
-        Complexity: O(n) where n is the number of tag assignments
-        """
-        # TODO: Implement prevalence calculation logic
-        raise NotImplementedError("prevalence not yet implemented")
+        counts: dict[TagValue, int] = {value: 0 for value in self.domain}
+        for ta in filtered:
+            counts[ta.value] += 1
+        
+        return {value: counts[value] / total for value in self.domain}
