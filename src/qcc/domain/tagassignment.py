@@ -1,11 +1,13 @@
 """TagAssignment domain model for crowd labeling quality control."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
 from qcc.domain.enums import TagValue
-
+from qcc.domain.tagger import Tagger
+from qcc.domain.comment import Comment
+from qcc.domain.characteristic import Characteristic
 
 @dataclass(frozen=True)
 class TagAssignment:
@@ -16,24 +18,26 @@ class TagAssignment:
     of a comment.
     
     Attributes:
-        tagger_id: Identifier of the tagger who made the assignment
-        comment_id: Identifier of the comment being tagged
-        characteristic_id: Identifier of the characteristic being evaluated
+        tagger: Tagger who made the assignment
+        comment: Comment being tagged
+        characteristic: Characteristic being evaluated
         value: The tag value assigned (must be from characteristic's domain)
         timestamp: When the assignment was made
     """
     
-    tagger_id: str
-    comment_id: str
-    characteristic_id: str
+    tagger: Tagger
+    comment: Comment
+    characteristic: Characteristic
     value: TagValue
     timestamp: datetime
     
     def __post_init__(self) -> None:
         """Validate the tag assignment."""
-        if not self.tagger_id:
-            raise ValueError("tagger_id cannot be empty")
-        if not self.comment_id:
-            raise ValueError("comment_id cannot be empty")
-        if not self.characteristic_id:
-            raise ValueError("characteristic_id cannot be empty")
+        if not self.tagger:
+            raise ValueError("tagger cannot be empty")
+        if not self.comment:
+            raise ValueError("comment cannot be empty")
+        if not self.value:
+            raise ValueError("characteristic cannot be empty")
+        if not self.timestamp:
+            raise ValueError("timestamp cannot be empty")
