@@ -30,3 +30,7 @@ class Prompt:
             raise ValueError("prompt id cannot be empty")
         if not self.text:
             raise ValueError("prompt text cannot be empty")
+
+    def num_comments(self) -> int:
+        """Return the number of comments associated with this prompt."""
+        return len(self.comments)

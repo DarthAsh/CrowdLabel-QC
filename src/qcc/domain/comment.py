@@ -59,3 +59,12 @@ class Comment:
         """
         # TODO: Implement characteristic-specific agreement calculation
         raise NotImplementedError("agreement_for not yet implemented")
+    
+    def unique_taggers(self) -> Set[str]:
+        """Get the set of unique taggers who have tagged this comment."""
+        return {assignment.tagger.id for assignment in self.tagassignments}
+
+    def agreement_for(self, characteristic: Characteristic) -> float:
+        """Calculate agreement for a specific characteristic on this comment."""
+        # TODO: Replace with actual calculation logic
+        raise NotImplementedError("agreement_for not yet implemented")
