@@ -1,10 +1,17 @@
 """Tagger domain model for crowd labeling quality control."""
 
 from dataclasses import dataclass
+import math
+import statistics
 from typing import Any, Dict, List, Optional
 
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.tagassignment import TagAssignment
+
+# Fraction of the longest intervals (by log2 seconds) to trim before taking the mean.
+# For example, 0.1 means trim the top 10% longest intervals. This helps ignore very
+# long breaks (e.g., overnight) when estimating a tagger's typical speed.
+TRIM_FRACTION = 0.1
 
 
 @dataclass(frozen=True)
@@ -31,33 +38,69 @@ class Tagger:
             object.__setattr__(self, 'tagassignments', [])
     
     def tagging_speed(self) -> float:
-        """Calculate the average tagging speed for this tagger.
-        
+        """Calculate a log2-based average tagging speed.
+
+        Procedure (robust to missing/None timestamps):
+        - If there are fewer than 2 valid timestamps, return 0.0.
+        - Sort assignments by timestamp and compute successive differences in seconds.
+        - For each positive interval, compute log2(interval_seconds) and keep it.
+        - Trim the TOP `TRIM_FRACTION` fraction of longest log2 intervals.
+        - Return the mean of the remaining log2 intervals. A lower score implies a
+          faster tagger (smaller time between tags).
+
         Returns:
-            Average time between tag assignments in seconds
-            
-        Complexity: O(n) where n is the number of tag assignments
+            Mean of the log2(seconds) of typical intervals (float). Returns 0.0
+            when not enough data is available.
         """
-         # If there are less than 2 tags, we can't calculate an interval.
-        if len(self.tagassignments) < 2:
+
+        # Filter out assignments that lack a usable timestamp
+        valid_assignments = [ta for ta in (self.tagassignments or []) if getattr(ta, 'timestamp', None) is not None]
+
+        # Need at least two timestamps to compute an interval
+        if len(valid_assignments) < 2:
             return 0.0
-        
-        # Sort the tags by time to put them in the right order.
-        sorted_assignments = sorted(self.tagassignments, key=lambda ta: ta.timestamp)
 
-        # Create a list of the time differences in seconds.
-        intervals_in_seconds = []
+        # Sort by timestamp
+        sorted_assignments = sorted(valid_assignments, key=lambda ta: ta.timestamp)
+
+        # Compute successive differences in seconds and take log2 of positive intervals
+        log_intervals = []
         for i in range(1, len(sorted_assignments)):
-            time_delta = sorted_assignments[i].timestamp - sorted_assignments[i-1].timestamp
-            intervals_in_seconds.append(time_delta.total_seconds())
+            t0 = sorted_assignments[i-1].timestamp
+            t1 = sorted_assignments[i].timestamp
+            # Defensive: ensure attributes are datetimes with total_seconds
+            try:
+                delta_seconds = (t1 - t0).total_seconds()
+            except Exception:
+                # If subtraction or total_seconds fails, skip this pair
+                continue
+            if delta_seconds > 0:
+                # Use log2 to compress long tails; skip non-positive deltas
+                log_intervals.append(math.log2(delta_seconds))
 
-        '''
-        TODO: Previously the final calculation was to take the log base 2 of each interval
-            and then find the average. This method was chosen to
-            correctly handle long breaks.
-        '''
-        # For now, just return a default placeholder value.
-        return 0.0
+        # If no positive intervals found, cannot compute speed
+        if not log_intervals:
+            return 0.0
+
+        # Trim the top TRIM_FRACTION longest log intervals
+        n = len(log_intervals)
+        trim_count = int(math.floor(n * TRIM_FRACTION))
+        if trim_count > 0:
+            # Remove the largest `trim_count` values
+            log_intervals_sorted = sorted(log_intervals)  # ascending
+            trimmed = log_intervals_sorted[: max(1, len(log_intervals_sorted) - trim_count)]
+        else:
+            trimmed = log_intervals
+
+        # Defensive: if trimming removed everything (shouldn't happen), fall back
+        if not trimmed:
+            trimmed = log_intervals
+
+        # Return mean of the remaining log2 intervals
+        try:
+            return float(statistics.mean(trimmed))
+        except statistics.StatisticsError:
+            return 0.0
     
     def agreement_with(self, other: "Tagger", characteristic: Characteristic) -> float:
         """Calculate agreement with another tagger for a specific characteristic.
