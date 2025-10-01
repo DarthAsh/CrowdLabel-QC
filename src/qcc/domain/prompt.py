@@ -3,26 +3,23 @@
 from dataclasses import dataclass
 from typing import List
 
-from qcc.domain.comment import Comment
-
+# Removed: from qcc.domain.comment import Comment (no longer needed)
 
 @dataclass(frozen=True)
 class Prompt:
-    """A prompt that contains multiple comments for labeling.
+    """A prompt that defines a task for labeling.
     
     A prompt represents a specific task or question that taggers
-    are asked to evaluate, and contains multiple comments that
-    need to be labeled according to the prompt's instructions.
+    are asked to evaluate. It is a definition, not a container of data.
     
     Attributes:
         id: Unique identifier for the prompt
         text: The instruction text for the prompt
-        comments: List of comments associated with this prompt
     """
     
     id: str
     text: str
-    comments: List[Comment]
+    # Removed: comments: List[Comment]
     
     def __post_init__(self) -> None:
         """Validate the prompt."""
@@ -30,7 +27,3 @@ class Prompt:
             raise ValueError("prompt id cannot be empty")
         if not self.text:
             raise ValueError("prompt text cannot be empty")
-
-    def num_comments(self) -> int:
-        """Return the number of comments associated with this prompt."""
-        return len(self.comments)
