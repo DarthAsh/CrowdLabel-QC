@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from qcc.domain.enums import TagValue
 from qcc.domain.tagger import Tagger
 from qcc.domain.comment import Comment
 from qcc.domain.characteristic import Characteristic
@@ -25,11 +24,12 @@ class TagAssignment:
         timestamp: When the assignment was made
     """
     
-    tagger: Tagger
-    comment: Comment
-    characteristic: Characteristic
-    value: TagValue
-    timestamp: datetime
+    tagger_who_assigned: Tagger
+    comment_assigned_for: Comment
+    assignment_time: datetime
+    characteristic_assigned_for: Characteristic
+    tag_value: bool
+    
     
     def __post_init__(self) -> None:
         """Validate the tag assignment."""
@@ -41,3 +41,6 @@ class TagAssignment:
             raise ValueError("characteristic cannot be empty")
         if not self.timestamp:
             raise ValueError("timestamp cannot be empty")
+        
+    def count_taggers_that_tagged_this_characteristic_for_this_comment(self, ):
+        # 
