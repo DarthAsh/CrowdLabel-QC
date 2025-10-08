@@ -17,11 +17,11 @@ class TagAssignment:
     of a comment.
     
     Attributes:
-        tagger: Tagger who made the assignment
-        comment: Comment being tagged
-        characteristic: Characteristic being evaluated
-        value: The tag value assigned (must be from characteristic's domain)
-        timestamp: When the assignment was made
+        tagger_who_assigned: Tagger who made the assignment
+        comment_assigned_for: Comment being tagged
+        assignment_time: When the assignment was made
+        characteristic_assigned_for: Characteristic being evaluated
+        tag_value: The tag value assigned (must be from characteristic's domain)        
     """
     
     tagger_who_assigned: Tagger
