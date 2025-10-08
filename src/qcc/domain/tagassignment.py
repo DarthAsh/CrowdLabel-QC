@@ -42,5 +42,6 @@ class TagAssignment:
         if not self.timestamp:
             raise ValueError("timestamp cannot be empty")
         
-    def count_taggers_that_tagged_this_characteristic_for_this_comment(self, ):
-        # 
+    def count_taggers_who_tagged_this_characteristic_for_this_comment(self, ):
+        # need other instances of tagger outside of the current tag assignment object
+        # db retrieval?
