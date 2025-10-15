@@ -184,3 +184,4 @@ class TaggerPerformanceReport:
         """
         # TODO: Implement agreement data formatting
         raise NotImplementedError("_format_agreement_data not yet implemented")
+

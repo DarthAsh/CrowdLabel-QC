@@ -141,3 +141,4 @@ class CharacteristicReliabilityReport:
         """
         # TODO: Implement prevalence data formatting
         raise NotImplementedError("_format_prevalence_data not yet implemented")
+

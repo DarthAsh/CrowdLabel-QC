@@ -37,3 +37,4 @@ class TagAssignment:
             raise ValueError("comment_id cannot be empty")
         if not self.characteristic_id:
             raise ValueError("characteristic_id cannot be empty")
+
