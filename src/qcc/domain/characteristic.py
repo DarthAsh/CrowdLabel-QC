@@ -72,3 +72,4 @@ class Characteristic:
         """
         # TODO: Implement prevalence calculation logic
         raise NotImplementedError("prevalence not yet implemented")
+

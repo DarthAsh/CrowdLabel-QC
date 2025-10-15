@@ -1,0 +1,50 @@
+# Default configuration for QCC (Quality Control of Crowd labeling)
+
+# Input/Output settings
+input:
+  format: "csv"  # csv, db
+  path: ""  # Path to input file or database connection string
+
+output:
+  directory: "reports"
+  format: "json"  # json, html, csv
+
+# Analysis settings
+analysis:
+  # Agreement metrics
+  agreement:
+    methods: ["percent_agreement", "cohens_kappa", "krippendorffs_alpha"]
+    min_agreement: 0.7
+    
+  # Speed analysis
+  speed:
+    enabled: true
+    min_interval_seconds: 1.0
+    max_interval_seconds: 3600.0
+    
+  # Pattern detection
+  patterns:
+    enabled: true
+    min_repetition_count: 3
+    max_pattern_length: 10
+
+# Reporting settings
+reporting:
+  # Characteristic reliability
+  characteristic_reliability:
+    enabled: true
+    include_prevalence: true
+    include_agreement: true
+    
+  # Tagger performance
+  tagger_performance:
+    enabled: true
+    include_speed: true
+    include_patterns: true
+    include_agreement: true
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+

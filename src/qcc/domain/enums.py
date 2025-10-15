@@ -19,3 +19,4 @@ class TagValue(str, Enum):
     def __str__(self) -> str:
         """Return the string value of the enum."""
         return self.value
+

@@ -59,3 +59,4 @@ class Comment:
         """
         # TODO: Implement characteristic-specific agreement calculation
         raise NotImplementedError("agreement_for not yet implemented")
+
