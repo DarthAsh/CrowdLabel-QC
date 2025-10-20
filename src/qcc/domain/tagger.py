@@ -43,7 +43,10 @@ class Tagger:
 
     id: str # Not sure if id is a string or int
     meta: Optional[Dict[str, Any]] = None
-    tagassignments: List[TagAssignment] = None
+    # Optional because a Tagger may be constructed without assignments for
+    # testing or incremental assembly. Use Optional[List[TagAssignment]] to
+    # satisfy static type checkers.
+    tagassignments: Optional[List[TagAssignment]] = None
     
     def __post_init__(self) -> None:
         """Initialize empty tagassignments list if not provided."""
@@ -53,19 +56,16 @@ class Tagger:
     def tagging_speed(self) -> float:
         """Calculate a log2-based average tagging speed.
 
-        Procedure (robust to missing/None timestamps):
-        - If there are fewer than 2 valid timestamps, return 0.0.
-        - Sort assignments by timestamp and compute successive differences in seconds.
-        - For each positive interval, compute log2(interval_seconds) and keep it.
-                - Trim the TOP `TRIM_FRACTION` fraction of longest log2 intervals.
-                    (upper-tail trimming only; this ignores long breaks such as
-                    overnight gaps).
-        - Return the mean of the remaining log2 intervals. A lower score implies a
-          faster tagger (smaller time between tags).
+        NOTE: This method is now a thin shim that delegates the actual
+        computation to the configured tagging-speed strategy
+        (`qcc.metrics.speed_strategy.LogTrimTaggingSpeed`). The original
+        algorithm (log2 of positive successive intervals with an upper-tail
+        trim) is preserved in this module as commented code to serve as the
+        source of truth for future refactors.
 
         Returns:
-            Mean of the log2(seconds) of typical intervals (float). Returns 0.0
-            when not enough data is available.
+            Mean of the log2(seconds) of typical intervals (float). Returns
+            0.0 when not enough data is available.
         """
 
         """Deprecated: shim delegating to a tagging speed strategy.
@@ -172,11 +172,12 @@ class Tagger:
         #     return 0.0
         # ------------------------------------------------------------------
         # Delegate to strategy helper (not implemented yet)
-        # seconds_per_tag will be provided by the strategy implementation's
-        # helper (e.g., LogTrimTaggingSpeed.seconds_per_tag) once the port is
-        # complete. For now we raise to force callers to use the metrics
-        # strategy APIs.
-        raise NotImplementedError("seconds_per_tag is deprecated; use strategy helper")
+        # Delegate to the strategy helper for consistent behavior.
+        from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
+
+        strategy = LogTrimTaggingSpeed()
+        mean_log2 = strategy.speed_log2(self)
+        return strategy.seconds_per_tag(mean_log2)
     
     def agreement_with(self, other: "Tagger", characteristic: Characteristic) -> float:
         """Calculate simple percent agreement with another tagger for a characteristic.
