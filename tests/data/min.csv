@@ -1,0 +1,8 @@
+assignment_id,team_id,tagger_id,comment_id,prompt_id,characteristic,value,tagged_at,comment_text,prompt_text
+1,team1,tagger1,comment1,prompt1,sentiment,YES,2024-01-01T00:00:00,This is a positive comment,Please label the sentiment
+2,team1,tagger2,comment1,prompt1,sentiment,YES,2024-01-01T00:01:00,This is a positive comment,Please label the sentiment
+3,team1,tagger1,comment2,prompt1,sentiment,NO,2024-01-01T00:02:00,This is a negative comment,Please label the sentiment
+4,team1,tagger2,comment2,prompt1,sentiment,NO,2024-01-01T00:03:00,This is a negative comment,Please label the sentiment
+5,team1,tagger1,comment3,prompt1,toxicity,NO,2024-01-01T00:04:00,This is a normal comment,Please label toxicity
+6,team1,tagger2,comment3,prompt1,toxicity,NO,2024-01-01T00:05:00,This is a normal comment,Please label toxicity
+
