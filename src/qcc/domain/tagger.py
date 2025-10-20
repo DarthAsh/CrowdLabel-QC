@@ -101,9 +101,13 @@ class Tagger:
         #     return 0.0
         # ------------------------------------------------------------------
         # Delegate to the default strategy (not implemented yet)
-        from qcc.metrics.default_strategies import DefaultTaggingSpeedStrategy
+        # Delegate to the named strategy skeleton. The actual algorithm will be
+        # ported into `qcc.metrics.speed_strategy.LogTrimTaggingSpeed` in a
+        # follow-up PR. Keep the original implementation above (commented)
+        # as the source of truth for the port.
+        from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
 
-        strategy = DefaultTaggingSpeedStrategy()
+        strategy = LogTrimTaggingSpeed()
         return strategy.speed_log2(self)
 
     def _compute_log_intervals(self) -> List[float]:
@@ -168,8 +172,10 @@ class Tagger:
         #     return 0.0
         # ------------------------------------------------------------------
         # Delegate to strategy helper (not implemented yet)
-        from qcc.metrics.default_strategies import DefaultTaggingSpeedStrategy
-
+        # seconds_per_tag will be provided by the strategy implementation's
+        # helper (e.g., LogTrimTaggingSpeed.seconds_per_tag) once the port is
+        # complete. For now we raise to force callers to use the metrics
+        # strategy APIs.
         raise NotImplementedError("seconds_per_tag is deprecated; use strategy helper")
     
     def agreement_with(self, other: "Tagger", characteristic: Characteristic) -> float:
