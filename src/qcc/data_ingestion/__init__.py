@@ -7,6 +7,7 @@ from .mysql_importer import (
     import_tag_prompt_deployment_tables,
     mysql_connection,
 )
+from .tag_prompt_dataset import TagPromptDeploymentDataset
 
 __all__ = [
     "MySQLConfig",
@@ -14,4 +15,5 @@ __all__ = [
     "mysql_connection",
     "DEFAULT_TAG_PROMPT_TABLES",
     "import_tag_prompt_deployment_tables",
+    "TagPromptDeploymentDataset",
 ]

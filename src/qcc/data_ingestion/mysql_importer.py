@@ -6,7 +6,12 @@ from contextlib import contextmanager
 import re
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
-import mysql.connector
+try:  # pragma: no cover - dependency availability is environment specific
+    import mysql.connector  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - handled at runtime
+    mysql_connector = None
+else:  # pragma: no cover - trivial alias
+    mysql_connector = mysql.connector
 
 from .mysql_config import MySQLConfig
 
@@ -20,7 +25,12 @@ DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = (
 def mysql_connection(config: MySQLConfig):
     """Context manager that yields an open MySQL connection."""
 
-    connection = mysql.connector.connect(**config.as_connector_kwargs())
+    if mysql_connector is None:
+        raise ModuleNotFoundError(
+            "mysql.connector is required to establish a MySQL connection. Install the 'mysql-connector-python' package."
+        )
+
+    connection = mysql_connector.connect(**config.as_connector_kwargs())
     try:
         yield connection
     finally:

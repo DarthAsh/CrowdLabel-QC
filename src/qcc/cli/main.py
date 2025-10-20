@@ -10,6 +10,11 @@ import yaml
 
 from qcc.config.schema import QCCConfig
 from qcc.io.csv_adapter import CSVAdapter
+from qcc.data_ingestion import (
+    MySQLConfig,
+    TagPromptDeploymentDataset,
+    import_tag_prompt_deployment_tables,
+)
 
 
 def main() -> int:
@@ -124,8 +129,22 @@ def run_analysis(
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Read input data
-    csv_adapter = CSVAdapter()
-    domain_objects = csv_adapter.read_domain_objects(input_path)
+    if config.input.format.lower() in {"db", "mysql"}:
+        if not config.input.path:
+            raise ValueError("Configuration input.path must contain a MySQL DSN when using db format")
+        mysql_config = MySQLConfig.from_dsn(config.input.path)
+        try:
+            table_data = import_tag_prompt_deployment_tables(mysql_config)
+        except ModuleNotFoundError as exc:
+            raise ValueError(
+                "MySQL support requires the 'mysql-connector-python' package to be installed"
+            ) from exc
+
+        dataset = TagPromptDeploymentDataset.from_mysql_tables(table_data)
+        domain_objects = dataset.as_domain_dict()
+    else:
+        csv_adapter = CSVAdapter()
+        domain_objects = csv_adapter.read_domain_objects(input_path)
     
     # TODO: Implement actual analysis logic
     # For now, return a simple summary

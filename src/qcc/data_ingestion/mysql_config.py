@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Dict, Optional
+from urllib.parse import parse_qs, urlparse
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,72 @@ class MySQLConfig:
             port=port_value,
             charset=env_map["charset"],
             use_pure=use_pure_value,
+        )
+
+    @classmethod
+    def from_dsn(cls, dsn: str) -> "MySQLConfig":
+        """Build a configuration object from a MySQL DSN string.
+
+        The DSN should follow the conventional format::
+
+            mysql://user:password@host:port/database?charset=utf8mb4&use_pure=1
+
+        Only the scheme, credentials, host, and database components are
+        required. Query parameters are optional and currently recognise the
+        ``charset`` and ``use_pure`` options.
+
+        Parameters
+        ----------
+        dsn:
+            Connection string describing how to connect to the database.
+
+        Returns
+        -------
+        MySQLConfig
+            Parsed configuration ready to be used with ``mysql.connector``.
+
+        Raises
+        ------
+        ValueError
+            If the DSN is missing required components or uses an unexpected
+            scheme.
+        """
+
+        if not dsn:
+            raise ValueError("MySQL DSN must be a non-empty string")
+
+        parsed = urlparse(dsn)
+        if parsed.scheme.lower() not in {"mysql", "mysql+mysqlconnector", "mysql+mysqldb"}:
+            raise ValueError(f"Unsupported MySQL DSN scheme: {parsed.scheme!r}")
+
+        if not parsed.username or not parsed.password:
+            raise ValueError("MySQL DSN must include username and password")
+        if not parsed.hostname:
+            raise ValueError("MySQL DSN must include a hostname")
+
+        # ``/database`` -> strip the leading slash
+        database = parsed.path.lstrip("/") if parsed.path else ""
+        if not database:
+            raise ValueError("MySQL DSN must include a database name")
+
+        query_params = parse_qs(parsed.query)
+
+        charset = query_params.get("charset", [None])[0]
+        use_pure_param = query_params.get("use_pure", [None])[0]
+        use_pure = False
+        if use_pure_param is not None:
+            use_pure = str(use_pure_param).strip().lower() in {"1", "true", "yes"}
+
+        port = parsed.port if parsed.port is not None else 3306
+
+        return cls(
+            host=parsed.hostname,
+            user=parsed.username,
+            password=parsed.password,
+            database=database,
+            port=port,
+            charset=charset,
+            use_pure=use_pure,
         )
 
     def as_connector_kwargs(self) -> Dict[str, object]:
