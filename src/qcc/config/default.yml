@@ -2,8 +2,18 @@
 
 # Input/Output settings
 input:
-  format: "csv"  # csv, db
-  path: ""  # Path to input file or database connection string
+  format: "csv"  # csv, mysql
+  path: null  # Path to input CSV file (used when format is csv)
+  mysql:
+    host: null
+    port: 3306
+    user: null
+    password: null
+    database: null
+    charset: null
+    use_pure: false
+    env_prefix: "MYSQL"
+    dsn: null
 
 output:
   directory: "reports"
