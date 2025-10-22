@@ -17,9 +17,41 @@ pip install qcc
 
 ## Quick Start
 
+Run the CLI directly from a source checkout (no package install required) by
+pointing `PYTHONPATH` at the `src/` tree:
+
 ```bash
-# Run quality control analysis
+PYTHONPATH=src python -m qcc.cli.main --help
 ```
+
+### Using a MySQL input source
+
+1. Copy the default configuration and adjust the `input` block for MySQL:
+
+   ```yaml
+   input:
+     format: mysql
+     mysql:
+       host: db.example.com
+       port: 3306
+       user: qc_reader
+       password: s3cret
+       database: crowd_quality
+   ```
+
+2. Run the CLI, choosing any placeholder path for `--in` (it is ignored when
+   `input.format` is `mysql`) and an output directory for the generated summary:
+
+   ```bash
+   PYTHONPATH=src python -m qcc.cli.main run \
+     --config path/to/mysql_config.yml \
+     --in ignored.csv \
+     --out path/to/output_dir
+   ```
+
+The command connects to MySQL with the configured credentials, imports the
+crowd-labeling tables, and writes `summary.json` under the chosen output
+directory.
 
 ## Development
 
