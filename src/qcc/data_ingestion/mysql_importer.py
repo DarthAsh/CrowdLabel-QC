@@ -6,8 +6,6 @@ from contextlib import contextmanager
 import re
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
-import mysql.connector
-
 from .mysql_config import MySQLConfig
 
 DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = (
@@ -19,6 +17,16 @@ DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = (
 @contextmanager
 def mysql_connection(config: MySQLConfig):
     """Context manager that yields an open MySQL connection."""
+
+    try:
+        import mysql.connector  # type: ignore[import-not-found]
+    except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        message = (
+            "mysql-connector-python is required to use the MySQL input adapter. "
+            "Install it with `pip install mysql-connector-python` or provide an "
+            "alternative driver that exposes the `mysql.connector` module."
+        )
+        raise ModuleNotFoundError(message) from exc
 
     connection = mysql.connector.connect(**config.as_connector_kwargs())
     try:
