@@ -38,7 +38,7 @@ class MySQLConfig:
     database: str
     port: int = 3306
     charset: Optional[str] = None
-    use_pure: bool = False
+    use_pure: bool = True
 
     @classmethod
     def from_env(cls, prefix: str = "MYSQL") -> "MySQLConfig":
@@ -69,7 +69,7 @@ class MySQLConfig:
             "database": os.getenv(f"{prefix}_DATABASE"),
             "port": os.getenv(f"{prefix}_PORT"),
             "charset": os.getenv(f"{prefix}_CHARSET"),
-            "use_pure": os.getenv(f"{prefix}_USE_PURE"),
+            "use_pure": True,
         }
 
         missing = [key for key in ("host", "user", "password", "database") if not env_map[key]]
