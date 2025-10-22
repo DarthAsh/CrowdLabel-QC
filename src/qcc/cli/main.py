@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
@@ -134,19 +135,15 @@ def run_analysis(
     
     # TODO: Implement actual analysis logic
     # For now, return a simple summary
+    summary = _build_summary(domain_objects)
+
     result = {
         "input_source": input_source,
         "output_directory": str(output_dir),
         "config": config.dict(),
-        "summary": {
-            "total_assignments": len(domain_objects.get("assignments", [])),
-            "total_comments": len(domain_objects.get("comments", [])),
-            "total_taggers": len(domain_objects.get("taggers", [])),
-            "total_prompts": len(domain_objects.get("prompts", [])),
-            "total_characteristics": len(domain_objects.get("characteristics", []))
-        }
+        "summary": summary,
     }
-    
+
     return result
 
 
@@ -161,6 +158,59 @@ def write_summary(result: dict, output_dir: Path) -> None:
     
     with open(summary_path, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, default=str)
+
+
+def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
+    """Aggregate a summary report from the loaded domain objects."""
+
+    assignments = list(domain_objects.get("assignments", []) or [])
+    comments = list(domain_objects.get("comments", []) or [])
+    taggers = list(domain_objects.get("taggers", []) or [])
+    characteristics = list(domain_objects.get("characteristics", []) or [])
+    answers = list(domain_objects.get("answers", []) or [])
+
+    total_assignments = len(assignments)
+    total_comments = len(comments)
+    total_answers = len(answers) if answers else total_comments
+    total_taggers = len(taggers)
+    total_characteristics = len(characteristics)
+
+    tag_value_counts = Counter(str(assignment.value) for assignment in assignments)
+    characteristic_counts = Counter(assignment.characteristic_id for assignment in assignments)
+    assignments_per_answer = {comment.id: len(comment.tagassignments) for comment in comments}
+    tagger_activity = {tagger.id: len(tagger.tagassignments) for tagger in taggers}
+
+    unanswered_comments = [comment_id for comment_id, count in assignments_per_answer.items() if count == 0]
+    question_ids = {answer.get("question_id") for answer in answers if answer.get("question_id")}
+    response_ids = {answer.get("response_id") for answer in answers if answer.get("response_id")}
+
+    average_tags_per_answer = (
+        float(total_assignments) / float(total_answers)
+        if total_answers
+        else 0.0
+    )
+
+    table_row_counts = {
+        "answer_tags": total_assignments,
+        "answers": len(answers),
+    }
+
+    return {
+        "total_assignments": total_assignments,
+        "total_answers": total_answers,
+        "total_comments": total_comments,
+        "total_taggers": total_taggers,
+        "total_characteristics": total_characteristics,
+        "unique_questions": len(question_ids),
+        "unique_responses": len(response_ids),
+        "assignments_by_value": dict(tag_value_counts),
+        "assignments_by_characteristic": dict(characteristic_counts),
+        "assignments_per_answer": assignments_per_answer,
+        "tagger_activity": tagger_activity,
+        "answers_without_tags": unanswered_comments,
+        "average_tags_per_answer": average_tags_per_answer,
+        "table_row_counts": table_row_counts,
+    }
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig
 ) -> Tuple[dict, str]:

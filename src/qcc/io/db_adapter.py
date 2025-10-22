@@ -57,7 +57,8 @@ class DBAdapter:
         """Load tag assignments from MySQL and convert them into domain objects."""
 
         rows = self._importer.fetch_table(self.assignments_table, limit=limit)
-        assignments, _ = self._build_assignments(rows)
+        table_data = {self.assignments_table: list(rows)}
+        assignments, _ = self._build_assignments(table_data[self.assignments_table], table_data)
         return assignments
 
     def read_domain_objects(self, limit: Optional[int] = None) -> Dict[str, Any]:
@@ -65,30 +66,43 @@ class DBAdapter:
 
         table_data = self._importer.import_tables(self._tables, limit=limit)
         assignment_rows = table_data.get(self.assignments_table, [])
-        assignments, metadata = self._build_assignments(assignment_rows)
+        assignments, metadata = self._build_assignments(assignment_rows, table_data)
 
         comments = self._build_comments(metadata, assignments)
         taggers = self._build_taggers(metadata, assignments)
         characteristics = self._build_characteristics(metadata)
+        answers = self._build_answers(metadata)
 
         return {
             "assignments": assignments,
             "comments": comments,
             "taggers": taggers,
             "characteristics": characteristics,
+            "answers": answers,
         }
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
     def _build_assignments(
-        self, rows: Iterable[Mapping[str, Any]]
+        self,
+        rows: Iterable[Mapping[str, Any]],
+        table_data: Optional[Mapping[str, Sequence[Mapping[str, Any]]]] = None,
     ) -> tuple[List[TagAssignment], Dict[str, Any]]:
         """Convert raw MySQL rows into TagAssignment objects.
 
         The method also collects metadata about comments, taggers and
         characteristics which is later used to build the other domain objects.
         """
+
+        answers_lookup: Dict[str, Mapping[str, Any]] = {}
+        if table_data:
+            answers_rows = table_data.get("answers") or []
+            for answer in answers_rows:
+                answer_id = answer.get("id")
+                if answer_id is None:
+                    continue
+                answers_lookup[str(answer_id)] = answer
 
         assignments: List[TagAssignment] = []
         assignments_by_comment: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
@@ -108,15 +122,36 @@ class DBAdapter:
             assignments_by_tagger[assignment.tagger_id].append(assignment)
 
             comment_id = assignment.comment_id
-            comment_text = self._extract_optional(row, ["comment_text", "text", "body"])
+            answer_row = answers_lookup.get(comment_id)
+            comment_text = None
+            prompt_id: Optional[Any] = None
+            question_id: Optional[Any] = None
+            response_id: Optional[Any] = None
+            answer_value: Optional[Any] = None
+
+            if answer_row:
+                comment_text = answer_row.get("comments") or answer_row.get("answer")
+                prompt_id = answer_row.get("question_id") or answer_row.get("response_id")
+                question_id = answer_row.get("question_id")
+                response_id = answer_row.get("response_id")
+                answer_value = answer_row.get("answer")
+
+            if not comment_text:
+                comment_text = self._extract_optional(row, ["comment_text", "text", "body"])
             if not comment_text:
                 comment_text = comment_id
-            prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
-            if not prompt_id:
-                prompt_id = "unknown_prompt"
+
+            if prompt_id in (None, ""):
+                prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
+            if prompt_id in (None, ""):
+                prompt_id = question_id or response_id or "unknown_prompt"
+
             comment_meta[comment_id] = {
-                "text": comment_text,
-                "prompt_id": prompt_id,
+                "text": str(comment_text),
+                "prompt_id": str(prompt_id) if prompt_id not in (None, "") else "unknown_prompt",
+                "question_id": str(question_id) if question_id not in (None, "") else None,
+                "response_id": str(response_id) if response_id not in (None, "") else None,
+                "answer_value": answer_value,
             }
 
             characteristic_id = assignment.characteristic_id
@@ -151,6 +186,7 @@ class DBAdapter:
             "comment_meta": comment_meta,
             "characteristic_meta": characteristic_meta,
             "tagger_meta": tagger_meta,
+            "answers_by_id": answers_lookup,
         }
         return assignments, metadata
 
@@ -211,9 +247,51 @@ class DBAdapter:
             )
         return characteristics
 
+    def _build_answers(self, metadata: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        answers_by_id: Mapping[str, Mapping[str, Any]] = metadata.get("answers_by_id", {})
+        comment_meta: Mapping[str, Mapping[str, Any]] = metadata.get("comment_meta", {})
+
+        answers: List[Dict[str, Any]] = []
+        for answer_id in answers_by_id:
+            info = comment_meta.get(answer_id, {})
+            question_id = info.get("question_id")
+            response_id = info.get("response_id")
+            answer_value = info.get("answer_value")
+            text = info.get("text", answer_id)
+            answers.append(
+                {
+                    "id": answer_id,
+                    "question_id": str(question_id) if question_id not in (None, "") else None,
+                    "response_id": str(response_id) if response_id not in (None, "") else None,
+                    "text": str(text),
+                    "answer_value": answer_value,
+                }
+            )
+
+        if not answers and comment_meta:
+            for answer_id, info in comment_meta.items():
+                answers.append(
+                    {
+                        "id": answer_id,
+                        "question_id": info.get("question_id"),
+                        "response_id": info.get("response_id"),
+                        "text": str(info.get("text", answer_id)),
+                        "answer_value": info.get("answer_value"),
+                    }
+                )
+
+        return answers
+
     def _row_to_assignment(self, row: Mapping[str, Any]) -> TagAssignment:
-        tagger_id = str(self._extract_required(row, ["tagger_id", "worker_id", "user_id"]))
-        comment_id = str(self._extract_required(row, ["comment_id", "commentId", "item_id"]))
+        tagger_id = str(
+            self._extract_required(row, ["tagger_id", "worker_id", "user_id"])
+        )
+        comment_id = str(
+            self._extract_required(
+                row,
+                ["comment_id", "commentId", "item_id", "answer_id"],
+            )
+        )
         characteristic_id = str(
             self._extract_required(
                 row,
@@ -221,6 +299,7 @@ class DBAdapter:
                     "characteristic_id",
                     "characteristicId",
                     "tag_prompt_deployment_characteristic_id",
+                    "tag_prompt_deployment_id",
                 ],
             )
         )
