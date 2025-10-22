@@ -20,8 +20,8 @@ DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = getattr(
     _mysql_importer,
     "DEFAULT_TAG_PROMPT_TABLES",
     (
-        "tag_prompt_deployment_answers",
-        "tag_prompt_deployment_confidences",
+        "answer_tags",
+        "answers",
     ),
 )
 

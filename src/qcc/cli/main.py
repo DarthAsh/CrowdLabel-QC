@@ -29,6 +29,8 @@ def main() -> int:
         # Load configuration
         config = load_config(args.config)
         
+
+        
         # Run the analysis
         result = run_analysis(
             input_path=args.input,

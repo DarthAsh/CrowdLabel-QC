@@ -9,8 +9,8 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 from .mysql_config import MySQLConfig
 
 DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = (
-    "tag_prompt_deployment_answers",
-    "tag_prompt_deployment_confidences",
+    "answer_tags",
+    "answers",
 )
 
 
@@ -103,3 +103,37 @@ def import_tag_prompt_deployment_tables(
 
     importer = TableImporter(config)
     return importer.import_tables(tables, limit=limit)
+
+# # src/qcc/data_ingestion/mysql_importer.py
+# import mysql.connector
+# from contextlib import contextmanager
+
+# class TableImporter:
+#     def __init__(self, config: MySQLConfig):
+#         self.config = config
+
+#     @contextmanager
+#     def _conn(self):
+#         cnx = mysql.connector.connect(**self.config.as_connector_kwargs())
+#         try:
+#             yield cnx
+#         finally:
+#             cnx.close()
+
+#     def import_tables(self, tables, limit=None):
+#         results = {}
+#         with self._conn() as cnx:
+#             cur = cnx.cursor(dictionary=True)
+#             for t in tables:
+#                 q = f"SELECT * FROM `{t}`"
+#                 if limit:
+#                     q += f" LIMIT {int(limit)}"
+#                 cur.execute(q)
+#                 results[t] = [dict(row) for row in cur.fetchall()]
+#             cur.close()
+#         return results
+
+# def import_tag_prompt_deployments(config: MySQLConfig, tables=DEFAULT_TAG_PROMPT_TABLES, limit=None):
+#     importer = TableImporter(config)
+#     return importer.import_tables(tables, limit=limit)
+
