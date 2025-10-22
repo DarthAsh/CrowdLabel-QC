@@ -263,7 +263,11 @@ class DBAdapter:
         if value is None:
             raise ValueError("Tag value cannot be None")
 
-        text = str(value).strip()
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            text = bytes(value).decode("utf-8", errors="ignore").strip()
+        else:
+            text = str(value).strip()
+
         if not text:
             raise ValueError("Tag value cannot be empty")
 
@@ -274,6 +278,21 @@ class DBAdapter:
 
         if normalized in self._NUMERIC_TAG_VALUE_MAP:
             return self._NUMERIC_TAG_VALUE_MAP[normalized]
+
+        # Some data sources persist floating point or decimal encodings of
+        # numeric tag values (for example "0.0" or Decimal("1")). Try to
+        # coerce them into an integer form before giving up on the mapping.
+        numeric_key: Optional[str] = None
+        if normalized.isdigit():
+            numeric_key = normalized
+        else:
+            try:
+                numeric_key = str(int(float(normalized)))
+            except ValueError:
+                numeric_key = None
+
+        if numeric_key and numeric_key in self._NUMERIC_TAG_VALUE_MAP:
+            return self._NUMERIC_TAG_VALUE_MAP[numeric_key]
 
         try:
             return TagValue(normalized)
