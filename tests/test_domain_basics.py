@@ -8,7 +8,6 @@ from qcc.domain.characteristic import Characteristic
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.comment import Comment
 from qcc.domain.tagger import Tagger
-from qcc.domain.prompt import Prompt
 
 
 class TestTagValue:
@@ -171,26 +170,4 @@ class TestTagger:
         with pytest.raises(NotImplementedError):
             tagger.pattern_signals(Characteristic("char1", "Test"))
 
-
-class TestPrompt:
-    """Test Prompt domain model."""
-    
-    def test_prompt_creation(self):
-        """Test basic prompt creation."""
-        prompt = Prompt(
-            id="prompt1",
-            text="Please label the sentiment of these comments",
-            comments=[]
-        )
-        assert prompt.id == "prompt1"
-        assert prompt.text == "Please label the sentiment of these comments"
-        assert prompt.comments == []
-    
-    def test_prompt_validation(self):
-        """Test prompt validation."""
-        with pytest.raises(ValueError, match="prompt id cannot be empty"):
-            Prompt("", "text", [])
-        
-        with pytest.raises(ValueError, match="prompt text cannot be empty"):
-            Prompt("prompt1", "", [])
 

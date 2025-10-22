@@ -10,7 +10,6 @@ from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.data_ingestion.mysql_importer import DEFAULT_TAG_PROMPT_TABLES, TableImporter
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.comment import Comment
-from qcc.domain.prompt import Prompt
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
 from qcc.domain.enums import TagValue
@@ -69,7 +68,6 @@ class DBAdapter:
         assignments, metadata = self._build_assignments(assignment_rows)
 
         comments = self._build_comments(metadata, assignments)
-        prompts = self._build_prompts(metadata, comments)
         taggers = self._build_taggers(metadata, assignments)
         characteristics = self._build_characteristics(metadata)
 
@@ -77,7 +75,6 @@ class DBAdapter:
             "assignments": assignments,
             "comments": comments,
             "taggers": taggers,
-            "prompts": prompts,
             "characteristics": characteristics,
         }
 
@@ -89,7 +86,7 @@ class DBAdapter:
     ) -> tuple[List[TagAssignment], Dict[str, Any]]:
         """Convert raw MySQL rows into TagAssignment objects.
 
-        The method also collects metadata about comments, prompts, taggers and
+        The method also collects metadata about comments, taggers and
         characteristics which is later used to build the other domain objects.
         """
 
@@ -97,7 +94,6 @@ class DBAdapter:
         assignments_by_comment: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
         assignments_by_tagger: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
         comment_meta: Dict[str, Dict[str, Any]] = {}
-        prompt_meta: Dict[str, Dict[str, Any]] = {}
         characteristic_meta: Dict[str, Dict[str, Any]] = {}
         tagger_meta: Dict[str, Dict[str, Any]] = {}
 
@@ -118,21 +114,10 @@ class DBAdapter:
             prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
             if not prompt_id:
                 prompt_id = "unknown_prompt"
-            prompt_text = self._extract_optional(row, ["prompt_text", "promptText"])
-            if not prompt_text:
-                prompt_text = prompt_id
-
             comment_meta[comment_id] = {
                 "text": comment_text,
                 "prompt_id": prompt_id,
             }
-
-            prompt_entry = prompt_meta.setdefault(
-                prompt_id,
-                {"text": prompt_text, "comment_ids": set()},
-            )
-            prompt_entry["text"] = prompt_text or prompt_entry["text"]
-            prompt_entry["comment_ids"].add(comment_id)
 
             characteristic_id = assignment.characteristic_id
             characteristic_name = self._extract_optional(
@@ -164,7 +149,6 @@ class DBAdapter:
             "assignments_by_comment": assignments_by_comment,
             "assignments_by_tagger": assignments_by_tagger,
             "comment_meta": comment_meta,
-            "prompt_meta": prompt_meta,
             "characteristic_meta": characteristic_meta,
             "tagger_meta": tagger_meta,
         }
@@ -190,30 +174,6 @@ class DBAdapter:
                 )
             )
         return comments
-
-    def _build_prompts(
-        self,
-        metadata: Mapping[str, Any],
-        comments: Iterable[Comment],
-    ) -> List[Prompt]:
-        prompt_meta: Mapping[str, Mapping[str, Any]] = metadata["prompt_meta"]
-        comment_lookup = {comment.id: comment for comment in comments}
-
-        prompts: List[Prompt] = []
-        for prompt_id, info in prompt_meta.items():
-            prompt_comments = [
-                comment_lookup[cid]
-                for cid in sorted(info.get("comment_ids", []))
-                if cid in comment_lookup
-            ]
-            prompts.append(
-                Prompt(
-                    id=prompt_id,
-                    text=str(info.get("text", prompt_id)),
-                    comments=prompt_comments,
-                )
-            )
-        return prompts
 
     def _build_taggers(
         self,

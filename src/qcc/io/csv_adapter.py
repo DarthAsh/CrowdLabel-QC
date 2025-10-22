@@ -8,7 +8,6 @@ from typing import Dict, List, Optional
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.comment import Comment
 from qcc.domain.enums import TagValue
-from qcc.domain.prompt import Prompt
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
 
@@ -71,7 +70,6 @@ class CSVAdapter:
             - 'assignments': List of TagAssignment objects
             - 'comments': List of Comment objects  
             - 'taggers': List of Tagger objects
-            - 'prompts': List of Prompt objects
             - 'characteristics': List of Characteristic objects
         """
         # TODO: Implement comprehensive domain object reading
