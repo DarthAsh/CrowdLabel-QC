@@ -240,13 +240,43 @@ class DBAdapter:
             timestamp=timestamp,
         )
 
+    _NUMERIC_TAG_VALUE_MAP = {
+        "0": TagValue.NO,
+        "1": TagValue.YES,
+        "2": TagValue.NA,
+        "3": TagValue.UNCERTAIN,
+        "4": TagValue.SKIP,
+    }
+
+    _TEXT_TAG_VALUE_MAP = {
+        "TRUE": TagValue.YES,
+        "FALSE": TagValue.NO,
+        "T": TagValue.YES,
+        "F": TagValue.NO,
+        "Y": TagValue.YES,
+        "N": TagValue.NO,
+    }
+
     def _parse_tag_value(self, value: Any) -> TagValue:
         if isinstance(value, TagValue):
             return value
         if value is None:
             raise ValueError("Tag value cannot be None")
+
+        text = str(value).strip()
+        if not text:
+            raise ValueError("Tag value cannot be empty")
+
+        normalized = text.upper()
+
+        if normalized in self._TEXT_TAG_VALUE_MAP:
+            return self._TEXT_TAG_VALUE_MAP[normalized]
+
+        if normalized in self._NUMERIC_TAG_VALUE_MAP:
+            return self._NUMERIC_TAG_VALUE_MAP[normalized]
+
         try:
-            return TagValue(str(value).strip().upper())
+            return TagValue(normalized)
         except ValueError as exc:  # pragma: no cover - defensive
             raise ValueError(f"Unsupported tag value: {value!r}") from exc
 

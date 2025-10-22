@@ -194,7 +194,9 @@ def _build_mysql_config(input_config: InputConfig) -> MySQLConfig:
     prefix = settings.env_prefix or "MYSQL"
 
     config_values: Dict[str, Optional[str]] = {}
-    fields_set = getattr(settings, "__fields_set__", set())
+    fields_set = getattr(settings, "model_fields_set", None)
+    if fields_set is None:  # pragma: no cover - backwards compatibility
+        fields_set = getattr(settings, "__fields_set__", set())
 
     if settings.dsn:
         parsed = urlparse(settings.dsn)
