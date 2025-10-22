@@ -112,10 +112,16 @@ class DBAdapter:
         tagger_meta: Dict[str, Dict[str, Any]] = {}
 
         for row in rows:
+            if row is None:
+                raise ValueError("Invalid assignment row: None")
+
             try:
                 assignment = self._row_to_assignment(row)
-            except (KeyError, ValueError) as exc:  # pragma: no cover - defensive
+            except (KeyError, ValueError, TypeError) as exc:  # pragma: no cover - defensive
                 raise ValueError(f"Invalid assignment row: {row!r}") from exc
+
+            if not isinstance(assignment, TagAssignment):  # pragma: no cover - defensive
+                raise ValueError(f"Invalid assignment row: {row!r}")
 
             assignments.append(assignment)
             assignments_by_comment[assignment.comment_id].append(assignment)
@@ -320,11 +326,15 @@ class DBAdapter:
         )
 
     _NUMERIC_TAG_VALUE_MAP = {
-        "0": TagValue.NO,
-        "1": TagValue.YES,
-        "2": TagValue.NA,
-        "3": TagValue.UNCERTAIN,
-        "4": TagValue.SKIP,
+        0: TagValue.NO,
+        1: TagValue.YES,
+        2: TagValue.NA,
+        3: TagValue.UNCERTAIN,
+        4: TagValue.SKIP,
+    }
+
+    _NEGATIVE_TAG_VALUE_MAP = {
+        -1: TagValue.NA,
     }
 
     _TEXT_TAG_VALUE_MAP = {
@@ -355,23 +365,17 @@ class DBAdapter:
         if normalized in self._TEXT_TAG_VALUE_MAP:
             return self._TEXT_TAG_VALUE_MAP[normalized]
 
-        if normalized in self._NUMERIC_TAG_VALUE_MAP:
-            return self._NUMERIC_TAG_VALUE_MAP[normalized]
+        numeric_value: Optional[int]
+        try:
+            numeric_value = int(float(normalized))
+        except ValueError:
+            numeric_value = None
 
-        # Some data sources persist floating point or decimal encodings of
-        # numeric tag values (for example "0.0" or Decimal("1")). Try to
-        # coerce them into an integer form before giving up on the mapping.
-        numeric_key: Optional[str] = None
-        if normalized.isdigit():
-            numeric_key = normalized
-        else:
-            try:
-                numeric_key = str(int(float(normalized)))
-            except ValueError:
-                numeric_key = None
-
-        if numeric_key and numeric_key in self._NUMERIC_TAG_VALUE_MAP:
-            return self._NUMERIC_TAG_VALUE_MAP[numeric_key]
+        if numeric_value is not None:
+            if numeric_value in self._NUMERIC_TAG_VALUE_MAP:
+                return self._NUMERIC_TAG_VALUE_MAP[numeric_value]
+            if numeric_value in self._NEGATIVE_TAG_VALUE_MAP:
+                return self._NEGATIVE_TAG_VALUE_MAP[numeric_value]
 
         try:
             return TagValue(normalized)

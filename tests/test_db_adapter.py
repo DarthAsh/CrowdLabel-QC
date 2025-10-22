@@ -124,3 +124,37 @@ def test_read_assignments_applies_limit():
     assert limited_assignments[0].tagger_id == "7"
     assert limited_assignments[0].value == TagValue.YES
 
+
+def test_db_adapter_normalizes_negative_numeric_tag_values():
+    answers = [
+        {"id": 1, "question_id": 99, "comments": "First", "response_id": 123},
+        {"id": 2, "question_id": 100, "comments": "Second", "response_id": 124},
+    ]
+    answer_tags = [
+        {
+            "id": 1,
+            "answer_id": 1,
+            "tag_prompt_deployment_id": 10,
+            "user_id": 7,
+            "value": "-1",
+            "created_at": datetime(2024, 1, 2, 0, 0, 0),
+        },
+        {
+            "id": 2,
+            "answer_id": 2,
+            "tag_prompt_deployment_id": 10,
+            "user_id": 8,
+            "value": "-1.0",
+            "created_at": datetime(2024, 1, 2, 0, 1, 0),
+        },
+    ]
+
+    adapter = _make_adapter({"answer_tags": answer_tags, "answers": answers})
+
+    assignments = adapter.read_assignments()
+
+    assert [assignment.value for assignment in assignments] == [
+        TagValue.NA,
+        TagValue.NA,
+    ]
+
