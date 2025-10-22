@@ -40,7 +40,9 @@ PYTHONPATH=src python -m qcc.cli.main --help
    ```
 
 2. Run the CLI, choosing any placeholder path for `--in` (it is ignored when
-   `input.format` is `mysql`) and an output directory for the generated summary:
+   `input.format` is `mysql`) and an output directory for the generated summary.
+
+   **Command:**
 
    ```bash
    PYTHONPATH=src python -m qcc.cli.main run \
