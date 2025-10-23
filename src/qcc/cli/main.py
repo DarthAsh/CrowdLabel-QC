@@ -1,6 +1,7 @@
 """Command-line interface for QCC (Quality Control of Crowd labeling)."""
 
 import argparse
+import csv
 import json
 import os
 import sys
@@ -155,9 +156,12 @@ def write_summary(result: dict, output_dir: Path) -> None:
         output_dir: Directory to write the summary file
     """
     summary_path = output_dir / "summary.json"
-    
+
     with open(summary_path, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, default=str)
+
+    summary = result.get("summary", {})
+    _write_summary_csv(summary, output_dir / "summary.csv")
 
 
 def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
@@ -234,6 +238,58 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         "characteristic_labels": characteristic_labels,
         "prompt_control_types": dict(prompt_control_types),
     }
+
+
+def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
+    """Write a flattened CSV representation of the summary report."""
+
+    rows = []
+
+    for key, value in summary.items():
+        if isinstance(value, dict):
+            for sub_key, sub_value in value.items():
+                rows.append(
+                    {
+                        "section": key,
+                        "metric": str(sub_key),
+                        "value": _stringify_csv_value(sub_value),
+                    }
+                )
+        elif isinstance(value, list):
+            rendered_list = ";".join(str(item) for item in value)
+            rows.append(
+                {
+                    "section": key,
+                    "metric": "",
+                    "value": rendered_list,
+                }
+            )
+        else:
+            rows.append(
+                {
+                    "section": "summary",
+                    "metric": str(key),
+                    "value": _stringify_csv_value(value),
+                }
+            )
+
+    if not rows:
+        rows.append({"section": "summary", "metric": "", "value": ""})
+
+    with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=["section", "metric", "value"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def _stringify_csv_value(value: object) -> str:
+    """Convert a summary value into a string suitable for CSV output."""
+
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:.6f}".rstrip("0").rstrip(".") if not value.is_integer() else str(int(value))
+    return str(value)
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig
 ) -> Tuple[dict, str]:
