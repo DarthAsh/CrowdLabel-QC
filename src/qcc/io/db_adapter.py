@@ -99,8 +99,11 @@ class DBAdapter:
         if table_data:
             answers_rows = table_data.get("answers") or []
             for answer in answers_rows:
-                answer_id = answer.get("id")
-                if answer_id is None:
+                answer_id = self._extract_optional(
+                    answer,
+                    ["id", "answer_id", "answerId"],
+                )
+                if answer_id in (None, ""):
                     continue
                 answers_lookup[str(answer_id)] = answer
 
@@ -136,11 +139,17 @@ class DBAdapter:
             answer_value: Optional[Any] = None
 
             if answer_row:
-                comment_text = answer_row.get("comments") or answer_row.get("answer")
-                prompt_id = answer_row.get("question_id") or answer_row.get("response_id")
-                question_id = answer_row.get("question_id")
-                response_id = answer_row.get("response_id")
-                answer_value = answer_row.get("answer")
+                comment_text = self._extract_optional(
+                    answer_row,
+                    ["comments", "comment", "answer", "text", "body"],
+                )
+                prompt_id = self._extract_optional(
+                    answer_row,
+                    ["question_id", "prompt_id", "response_id"],
+                )
+                question_id = self._extract_optional(answer_row, ["question_id"])
+                response_id = self._extract_optional(answer_row, ["response_id"])
+                answer_value = self._extract_optional(answer_row, ["answer", "value"])
 
             if not comment_text:
                 comment_text = self._extract_optional(row, ["comment_text", "text", "body"])
@@ -295,7 +304,13 @@ class DBAdapter:
         comment_id = str(
             self._extract_required(
                 row,
-                ["comment_id", "commentId", "item_id", "answer_id"],
+                [
+                    "comment_id",
+                    "commentId",
+                    "item_id",
+                    "answer_id",
+                    "answerId",
+                ],
             )
         )
         characteristic_id = str(
@@ -396,14 +411,30 @@ class DBAdapter:
         raise ValueError(f"Cannot parse timestamp from value: {value!r}")
 
     def _extract_required(self, row: Mapping[str, Any], keys: Sequence[str]) -> Any:
-        for key in keys:
-            if key in row and row[key] not in (None, ""):
-                return row[key]
-        raise KeyError(f"Missing required columns {keys!r} in row {row!r}")
+        value = self._extract_optional(row, keys)
+        if value in (None, ""):
+            raise KeyError(f"Missing required columns {keys!r} in row {row!r}")
+        return value
 
     def _extract_optional(self, row: Mapping[str, Any], keys: Sequence[str]) -> Optional[Any]:
         for key in keys:
-            if key in row and row[key] not in (None, ""):
-                return row[key]
+            value = self._get_column_value(row, key)
+            if value not in (None, ""):
+                return value
         return None
+
+    def _get_column_value(self, row: Mapping[str, Any], key: str) -> Optional[Any]:
+        if key in row:
+            return row[key]
+        if not isinstance(key, str):
+            return None
+        key_normalized = self._normalize_column_name(key)
+        for column, value in row.items():
+            if isinstance(column, str) and self._normalize_column_name(column) == key_normalized:
+                return value
+        return None
+
+    @staticmethod
+    def _normalize_column_name(name: str) -> str:
+        return "".join(ch for ch in name.lower() if ch.isalnum())
 

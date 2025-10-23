@@ -158,3 +158,39 @@ def test_db_adapter_normalizes_negative_numeric_tag_values():
         TagValue.NA,
     ]
 
+
+def test_db_adapter_handles_camel_cased_answer_identifiers():
+    answers = [
+        {
+            "answerId": 501,
+            "questionId": 321,
+            "responseId": 654,
+            "comments": "Camel", 
+        },
+    ]
+    answer_tags = [
+        {
+            "ID": 7,
+            "answerId": 501,
+            "tagPromptDeploymentId": 11,
+            "userId": 9001,
+            "value": "TRUE",
+            "createdAt": datetime(2024, 3, 1, 9, 30, 0),
+        }
+    ]
+
+    adapter = _make_adapter({"answer_tags": answer_tags, "answers": answers})
+
+    domain_objects = adapter.read_domain_objects()
+
+    assignments = domain_objects["assignments"]
+    assert len(assignments) == 1
+    assert assignments[0].comment_id == "501"
+    assert assignments[0].tagger_id == "9001"
+    assert assignments[0].characteristic_id == "11"
+    assert assignments[0].value == TagValue.YES
+
+    answers_output = domain_objects["answers"]
+    assert answers_output[0]["id"] == "501"
+    assert answers_output[0]["question_id"] == "321"
+
