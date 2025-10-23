@@ -30,9 +30,8 @@ def main() -> int:
     try:
         # Load configuration
         config = load_config(args.config)
-        
+        config = _apply_run_overrides(config, args)
 
-        
         # Run the analysis
         result = run_analysis(
             input_path=args.input,
@@ -69,9 +68,10 @@ def create_argument_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--in",
         dest="input",
-        required=True,
+        required=False,
+        default=None,
         type=Path,
-        help="Path to input CSV file"
+        help="Path to input CSV file (optional when using MySQL input)"
     )
     run_parser.add_argument(
         "--out",
@@ -79,6 +79,63 @@ def create_argument_parser() -> argparse.ArgumentParser:
         required=True,
         type=Path,
         help="Output directory for reports"
+    )
+    run_parser.add_argument(
+        "--format",
+        dest="input_format",
+        choices=["csv", "mysql"],
+        help="Override the configured input format"
+    )
+    run_parser.add_argument(
+        "--mysql-dsn",
+        dest="mysql_dsn",
+        help="MySQL DSN (e.g., mysql://user:pass@host:3306/dbname)"
+    )
+    run_parser.add_argument(
+        "--mysql-host",
+        dest="mysql_host",
+        help="MySQL server hostname"
+    )
+    run_parser.add_argument(
+        "--mysql-port",
+        dest="mysql_port",
+        type=int,
+        help="MySQL server port"
+    )
+    run_parser.add_argument(
+        "--mysql-user",
+        dest="mysql_user",
+        help="MySQL user name"
+    )
+    run_parser.add_argument(
+        "--mysql-password",
+        dest="mysql_password",
+        help="MySQL user password"
+    )
+    run_parser.add_argument(
+        "--mysql-database",
+        dest="mysql_database",
+        help="MySQL database name"
+    )
+    run_parser.add_argument(
+        "--mysql-charset",
+        dest="mysql_charset",
+        help="Character set for the MySQL connection"
+    )
+    run_parser.add_argument(
+        "--mysql-env-prefix",
+        dest="mysql_env_prefix",
+        help="Environment variable prefix for missing MySQL settings"
+    )
+    run_parser.add_argument(
+        "--mysql-use-pure",
+        dest="mysql_use_pure",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Force mysql.connector to use the pure Python implementation"
+            " (use --no-mysql-use-pure to disable)"
+        )
     )
     run_parser.add_argument(
         "--config",
@@ -109,8 +166,51 @@ def load_config(config_path: Path) -> QCCConfig:
     
     with open(config_path, 'r', encoding='utf-8') as f:
         config_data = yaml.safe_load(f)
-    
+
     return QCCConfig(**config_data)
+
+
+def _apply_run_overrides(config: QCCConfig, args: argparse.Namespace) -> QCCConfig:
+    """Apply CLI overrides to the loaded configuration for the run command."""
+
+    if getattr(args, "command", None) != "run":
+        return config
+
+    try:  # Prefer Pydantic v2 API when available
+        updated = config.model_copy(deep=True)  # type: ignore[attr-defined]
+    except AttributeError:  # pragma: no cover - fallback for Pydantic v1
+        updated = config.copy(deep=True)
+
+    if getattr(args, "input_format", None):
+        updated.input.format = args.input_format
+
+    input_format = updated.input.format.strip().lower()
+
+    if input_format == "csv" and args.input:
+        updated.input.path = str(args.input)
+
+    if input_format == "mysql":
+        mysql_settings = updated.input.mysql
+        if getattr(args, "mysql_env_prefix", None):
+            mysql_settings.env_prefix = args.mysql_env_prefix
+        if getattr(args, "mysql_dsn", None):
+            mysql_settings.dsn = args.mysql_dsn
+        if getattr(args, "mysql_host", None):
+            mysql_settings.host = args.mysql_host
+        if getattr(args, "mysql_port", None) is not None:
+            mysql_settings.port = int(args.mysql_port)
+        if getattr(args, "mysql_user", None):
+            mysql_settings.user = args.mysql_user
+        if getattr(args, "mysql_password", None):
+            mysql_settings.password = args.mysql_password
+        if getattr(args, "mysql_database", None):
+            mysql_settings.database = args.mysql_database
+        if getattr(args, "mysql_charset", None):
+            mysql_settings.charset = args.mysql_charset
+        if getattr(args, "mysql_use_pure", None) is not None:
+            mysql_settings.use_pure = bool(args.mysql_use_pure)
+
+    return updated
 
 
 def run_analysis(

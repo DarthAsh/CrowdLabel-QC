@@ -33,6 +33,7 @@ class TestCLISmoke:
         assert "--in" in result.stdout
         assert "--out" in result.stdout
         assert "--config" in result.stdout
+        assert "--mysql-dsn" in result.stdout
     
     def test_cli_run_missing_args(self):
         """Test that CLI run fails gracefully with missing required args."""
@@ -51,6 +52,7 @@ class TestCLISmoke:
             result = subprocess.run(
                 [
                     sys.executable, "-m", "qcc.cli.main", "run",
+                    "--format", "csv",
                     "--in", "nonexistent.csv",
                     "--out", str(output_dir)
                 ],
@@ -77,17 +79,18 @@ class TestCLISmoke:
             result = subprocess.run(
                 [
                     sys.executable, "-m", "qcc.cli.main", "run",
+                    "--format", "csv",
                     "--in", str(input_file),
                     "--out", str(output_dir)
                 ],
                 capture_output=True,
                 text=True
             )
-            
-            # Should fail gracefully since CSV adapter is not implemented
-            # but CLI should not crash
-            assert result.returncode != 0  # Expected due to NotImplementedError
-            assert "not yet implemented" in result.stderr or "error" in result.stderr.lower()
+
+            # CLI should complete successfully and produce the reports
+            assert result.returncode == 0
+            assert (output_dir / "summary.json").exists()
+            assert (output_dir / "summary.csv").exists()
     
     def test_cli_config_loading(self):
         """Test that CLI can load default configuration."""
@@ -99,6 +102,7 @@ class TestCLISmoke:
                 result = subprocess.run(
                     [
                         sys.executable, "-m", "qcc.cli.main", "run",
+                        "--format", "csv",
                         "--in", "nonexistent.csv",
                         "--out", str(output_dir),
                         "--config", str(config_file)
@@ -115,29 +119,30 @@ class TestCLISmoke:
         with tempfile.TemporaryDirectory() as temp_dir:
             input_file = Path(temp_dir) / "min.csv"
             output_dir = Path(temp_dir) / "new_output_dir"
-            
+
             # Create minimal CSV
             csv_content = """assignment_id,team_id,tagger_id,comment_id,prompt_id,characteristic,value,tagged_at,comment_text,prompt_text
 1,team1,tagger1,comment1,prompt1,sentiment,YES,2024-01-01T00:00:00,Test comment,Test prompt
 """
             input_file.write_text(csv_content)
-            
+
             # Ensure output directory doesn't exist
             assert not output_dir.exists()
-            
-            # Run CLI (will fail due to NotImplementedError, but should create output dir)
+
+            # Run CLI and ensure it succeeds while creating the output directory
             result = subprocess.run(
                 [
                     sys.executable, "-m", "qcc.cli.main", "run",
+                    "--format", "csv",
                     "--in", str(input_file),
                     "--out", str(output_dir)
                 ],
                 capture_output=True,
                 text=True
             )
-            
-            # Output directory should be created even if analysis fails
-            # Note: This test might need adjustment based on actual CLI implementation
-            # For now, we expect it to fail due to NotImplementedError
-            assert result.returncode != 0
+
+            # Output directory should be created and the command should succeed
+            assert result.returncode == 0
+            assert (output_dir / "summary.json").exists()
+            assert (output_dir / "summary.csv").exists()
 
