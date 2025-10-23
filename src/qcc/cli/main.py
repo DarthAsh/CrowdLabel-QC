@@ -6,10 +6,9 @@ import json
 import math
 import os
 import sys
-from collections import Counter
 from pathlib import Path
 from statistics import mean, median
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import yaml
@@ -268,50 +267,12 @@ def write_summary(result: dict, output_dir: Path) -> None:
 
 
 def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
-    """Aggregate a summary report from the loaded domain objects."""
+    """Aggregate a summary report containing tagging speed statistics only."""
 
-    assignments = list(domain_objects.get("assignments", []) or [])
-    comments = list(domain_objects.get("comments", []) or [])
     taggers = list(domain_objects.get("taggers", []) or [])
-    characteristics = list(domain_objects.get("characteristics", []) or [])
-    answers = list(domain_objects.get("answers", []) or [])
-    prompt_deployments = list(domain_objects.get("prompt_deployments", []) or [])
-    prompts = list(domain_objects.get("prompts", []) or [])
-    questions = list(domain_objects.get("questions", []) or [])
-
-    total_assignments = len(assignments)
-    total_comments = len(comments)
-    total_answers = len(answers) if answers else total_comments
-    total_taggers = len(taggers)
-    total_characteristics = len(characteristics)
-    total_prompt_deployments = len(prompt_deployments)
-    total_prompts = len(prompts)
-    total_questions = len(questions)
-
-    tag_value_counts = Counter(str(assignment.value) for assignment in assignments)
-    characteristic_counts = Counter(assignment.characteristic_id for assignment in assignments)
-    assignments_per_answer = {comment.id: len(comment.tagassignments) for comment in comments}
-    tagger_activity = {tagger.id: len(tagger.tagassignments) for tagger in taggers}
-    characteristic_labels = {characteristic.id: characteristic.name for characteristic in characteristics}
-    prompt_control_types = Counter(
-        str(prompt.get("control_type"))
-        for prompt in prompts
-        if prompt.get("control_type") not in (None, "")
-    )
-
-    unanswered_comments = [comment_id for comment_id, count in assignments_per_answer.items() if count == 0]
-    question_ids = {answer.get("question_id") for answer in answers if answer.get("question_id")}
-    response_ids = {answer.get("response_id") for answer in answers if answer.get("response_id")}
-
-    average_tags_per_answer = (
-        float(total_assignments) / float(total_answers)
-        if total_answers
-        else 0.0
-    )
 
     speed_strategy = LogTrimTaggingSpeed()
-    mean_log2_by_tagger: Dict[str, float] = {}
-    seconds_per_tag_by_tagger: Dict[str, float] = {}
+    per_tagger_speed: List[Dict[str, object]] = []
     seconds_samples = []
 
     for tagger in taggers:
@@ -332,8 +293,14 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         if not math.isfinite(seconds_value):
             continue
 
-        mean_log2_by_tagger[tagger.id] = mean_log2
-        seconds_per_tag_by_tagger[tagger.id] = seconds_value
+        per_tagger_speed.append(
+            {
+                "tagger_id": str(tagger.id),
+                "mean_log2": mean_log2,
+                "seconds_per_tag": seconds_value,
+                "timestamped_assignments": len(assignments_with_time),
+            }
+        )
         if seconds_value > 0:
             seconds_samples.append(seconds_value)
 
@@ -348,102 +315,71 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         min_seconds = 0.0
         max_seconds = 0.0
 
-    tagger_speed_metrics = {
-        "taggers_with_speed": len(mean_log2_by_tagger),
-        "mean_log2_by_tagger": mean_log2_by_tagger,
-        "seconds_per_tag_by_tagger": seconds_per_tag_by_tagger,
-        "mean_seconds_per_tag": mean_seconds,
-        "median_seconds_per_tag": median_seconds,
-        "min_seconds_per_tag": min_seconds,
-        "max_seconds_per_tag": max_seconds,
+    summary_seconds = {
+        "mean": mean_seconds,
+        "median": median_seconds,
+        "min": min_seconds,
+        "max": max_seconds,
     }
-
-    table_row_counts = {
-        "answer_tags": total_assignments,
-        "answers": len(answers),
-    }
-    if prompts:
-        table_row_counts["tag_prompts"] = len(prompts)
-    if prompt_deployments:
-        table_row_counts["tag_prompt_deployments"] = len(prompt_deployments)
-    if questions:
-        table_row_counts["questions"] = len(questions)
 
     return {
-        "total_assignments": total_assignments,
-        "total_answers": total_answers,
-        "total_comments": total_comments,
-        "total_taggers": total_taggers,
-        "total_characteristics": total_characteristics,
-        "total_prompt_deployments": total_prompt_deployments,
-        "total_prompts": total_prompts,
-        "total_questions": total_questions,
-        "unique_questions": len(question_ids),
-        "unique_responses": len(response_ids),
-        "assignments_by_value": dict(tag_value_counts),
-        "assignments_by_characteristic": dict(characteristic_counts),
-        "assignments_per_answer": assignments_per_answer,
-        "tagger_activity": tagger_activity,
-        "answers_without_tags": unanswered_comments,
-        "average_tags_per_answer": average_tags_per_answer,
-        "table_row_counts": table_row_counts,
-        "characteristic_labels": characteristic_labels,
-        "prompt_control_types": dict(prompt_control_types),
-        "tagger_speed_metrics": tagger_speed_metrics,
+        "tagger_speed": {
+            "strategy": "LogTrimTaggingSpeed",
+            "taggers_with_speed": len(per_tagger_speed),
+            "seconds_per_tag": summary_seconds,
+            "per_tagger": per_tagger_speed,
+        }
     }
 
 
 def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
-    """Write a flattened CSV representation of the summary report."""
+    """Write a CSV representation of the tagging speed summary."""
 
-    rows = []
+    rows: List[Dict[str, str]] = []
+    tagger_speed = summary.get("tagger_speed", {}) if summary else {}
 
-    for key, value in summary.items():
-        if isinstance(value, dict):
-            for metric, metric_value in _flatten_dict_items("", value):
-                rows.append(
-                    {
-                        "section": key,
-                        "metric": metric,
-                        "value": _stringify_csv_value(metric_value),
-                    }
-                )
-        elif isinstance(value, list):
-            rendered_list = ";".join(str(item) for item in value)
+    if tagger_speed:
+        taggers_with_speed = tagger_speed.get("taggers_with_speed", 0)
+        rows.append(
+            {
+                "Section": "Tagger Speed",
+                "Item": "aggregate",
+                "Metric": "taggers_with_speed",
+                "Value": _stringify_csv_value(taggers_with_speed),
+            }
+        )
+
+        seconds_section = tagger_speed.get("seconds_per_tag", {}) or {}
+        for metric_name, metric_value in seconds_section.items():
             rows.append(
                 {
-                    "section": key,
-                    "metric": "",
-                    "value": rendered_list,
+                    "Section": "Tagger Speed",
+                    "Item": "aggregate",
+                    "Metric": f"seconds_per_tag_{metric_name}",
+                    "Value": _stringify_csv_value(metric_value),
                 }
             )
-        else:
-            rows.append(
-                {
-                    "section": "summary",
-                    "metric": str(key),
-                    "value": _stringify_csv_value(value),
-                }
-            )
+
+        for tagger_entry in tagger_speed.get("per_tagger", []) or []:
+            tagger_id = str(tagger_entry.get("tagger_id", ""))
+            for metric_name in ("mean_log2", "seconds_per_tag", "timestamped_assignments"):
+                if metric_name in tagger_entry:
+                    rows.append(
+                        {
+                            "Section": "Tagger Speed",
+                            "Item": tagger_id,
+                            "Metric": metric_name,
+                            "Value": _stringify_csv_value(tagger_entry[metric_name]),
+                        }
+                    )
 
     if not rows:
-        rows.append({"section": "summary", "metric": "", "value": ""})
+        rows.append({"Section": "Tagger Speed", "Item": "aggregate", "Metric": "", "Value": ""})
 
     with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=["section", "metric", "value"])
+        writer = csv.DictWriter(csv_file, fieldnames=["Section", "Item", "Metric", "Value"])
         writer.writeheader()
         writer.writerows(rows)
-
-
-def _flatten_dict_items(prefix: str, value: Dict[str, object]) -> Iterable[Tuple[str, object]]:
-    """Yield flattened key/value pairs for nested dictionaries."""
-
-    for key, item in value.items():
-        metric_key = f"{prefix}.{key}" if prefix else str(key)
-        if isinstance(item, dict):
-            yield from _flatten_dict_items(metric_key, item)
-        else:
-            yield metric_key, item
 
 
 def _stringify_csv_value(value: object) -> str:

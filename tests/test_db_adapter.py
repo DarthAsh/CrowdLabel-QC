@@ -146,21 +146,10 @@ def test_db_adapter_merges_answers_with_tags():
     assert deployments["5"]["prompt_label"] == "Spam?"
 
     summary = _build_summary(domain_objects)
-    assert summary["total_assignments"] == 2
-    assert summary["total_answers"] == 2
-    assert summary["total_prompts"] == 1
-    assert summary["total_prompt_deployments"] == 1
-    assert summary["total_questions"] == 1
-    assert summary["assignments_by_value"] == {"YES": 1, "NO": 1}
-    assert summary["characteristic_labels"] == {"5": "Spam?"}
-    assert summary["prompt_control_types"] == {"yes_no": 1}
-    assert summary["table_row_counts"] == {
-        "answer_tags": 2,
-        "answers": 2,
-        "tag_prompt_deployments": 1,
-        "tag_prompts": 1,
-        "questions": 1,
-    }
+    assert "tagger_speed" in summary
+    speed_summary = summary["tagger_speed"]
+    assert speed_summary["strategy"] == "LogTrimTaggingSpeed"
+    assert "taggers_with_speed" in speed_summary
 
 
 def test_read_assignments_applies_limit():
@@ -274,12 +263,14 @@ def test_summary_includes_speed_metrics():
 
     summary = _build_summary(domain_objects)
 
-    speed_metrics = summary["tagger_speed_metrics"]
+    speed_metrics = summary["tagger_speed"]
     assert speed_metrics["taggers_with_speed"] == 1
-    assert speed_metrics["mean_log2_by_tagger"]["42"] == pytest.approx(3.0)
-    assert speed_metrics["seconds_per_tag_by_tagger"]["42"] == pytest.approx(8.0)
-    assert speed_metrics["mean_seconds_per_tag"] == pytest.approx(8.0)
-    assert speed_metrics["median_seconds_per_tag"] == pytest.approx(8.0)
+    assert speed_metrics["seconds_per_tag"]["mean"] == pytest.approx(8.0)
+    assert speed_metrics["seconds_per_tag"]["median"] == pytest.approx(8.0)
+
+    per_tagger = {entry["tagger_id"]: entry for entry in speed_metrics["per_tagger"]}
+    assert per_tagger["42"]["mean_log2"] == pytest.approx(3.0)
+    assert per_tagger["42"]["seconds_per_tag"] == pytest.approx(8.0)
 
 
 def test_db_adapter_handles_camel_cased_answer_identifiers():

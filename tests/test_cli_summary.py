@@ -16,47 +16,24 @@ def test_write_summary_creates_csv(tmp_path):
     output_dir = Path(tmp_path)
     result = {
         "summary": {
-            "total_assignments": 3,
-            "assignments_by_value": {"YES": 2, "NO": 1},
-            "answers_without_tags": ["101"],
-            "average_tags_per_answer": 1.5,
-        }
-    }
-
-    write_summary(result, output_dir)
-
-    csv_path = output_dir / "summary.csv"
-    assert csv_path.exists()
-
-    rows = _read_csv_rows(csv_path)
-
-    assert {row["section"] for row in rows} >= {"summary", "assignments_by_value", "answers_without_tags"}
-
-    summary_rows = {row["metric"]: row["value"] for row in rows if row["section"] == "summary"}
-    assert summary_rows["total_assignments"] == "3"
-
-    assert summary_rows["average_tags_per_answer"] == "1.5"
-
-    assignments_by_value_rows = {
-        row["metric"]: row["value"]
-        for row in rows
-        if row["section"] == "assignments_by_value"
-    }
-    assert assignments_by_value_rows == {"YES": "2", "NO": "1"}
-
-    answers_without_tags = [
-        row["value"] for row in rows if row["section"] == "answers_without_tags"
-    ][0]
-    assert answers_without_tags == "101"
-
-
-def test_write_summary_flattens_nested_dicts(tmp_path):
-    output_dir = Path(tmp_path)
-    result = {
-        "summary": {
-            "tagger_speed_metrics": {
-                "seconds_per_tag_by_tagger": {"worker-1": 12.5},
-                "mean_seconds_per_tag": 12.5,
+            "tagger_speed": {
+                "strategy": "LogTrimTaggingSpeed",
+                "taggers_with_speed": 2,
+                "seconds_per_tag": {"mean": 7.5, "median": 7.5, "min": 5.0, "max": 10.0},
+                "per_tagger": [
+                    {
+                        "tagger_id": "worker-1",
+                        "mean_log2": 3.0,
+                        "seconds_per_tag": 8.0,
+                        "timestamped_assignments": 5,
+                    },
+                    {
+                        "tagger_id": "worker-2",
+                        "mean_log2": 2.0,
+                        "seconds_per_tag": 4.0,
+                        "timestamped_assignments": 4,
+                    },
+                ],
             }
         }
     }
@@ -67,12 +44,38 @@ def test_write_summary_flattens_nested_dicts(tmp_path):
     assert csv_path.exists()
 
     rows = _read_csv_rows(csv_path)
+    headers = rows[0].keys()
+    assert headers == {"Section", "Item", "Metric", "Value"}
 
-    metrics = {
-        (row["section"], row["metric"]): row["value"]
-        for row in rows
-        if row["section"] == "tagger_speed_metrics"
+    aggregate_rows = [
+        row for row in rows if row["Item"] == "aggregate" and row["Metric"].startswith("seconds_per_tag_")
+    ]
+    assert {row["Metric"] for row in aggregate_rows} == {
+        "seconds_per_tag_mean",
+        "seconds_per_tag_median",
+        "seconds_per_tag_min",
+        "seconds_per_tag_max",
     }
 
-    assert metrics[("tagger_speed_metrics", "seconds_per_tag_by_tagger.worker-1")] == "12.5"
-    assert metrics[("tagger_speed_metrics", "mean_seconds_per_tag")] == "12.5"
+    per_tagger_rows = [row for row in rows if row["Item"] == "worker-1"]
+    per_tagger_metrics = {row["Metric"]: row["Value"] for row in per_tagger_rows}
+    assert per_tagger_metrics == {
+        "mean_log2": "3",
+        "seconds_per_tag": "8",
+        "timestamped_assignments": "5",
+    }
+
+
+def test_write_summary_handles_missing_speed_data(tmp_path):
+    output_dir = Path(tmp_path)
+    result = {"summary": {"tagger_speed": {"strategy": "LogTrimTaggingSpeed", "per_tagger": []}}}
+
+    write_summary(result, output_dir)
+
+    csv_path = output_dir / "summary.csv"
+    assert csv_path.exists()
+
+    rows = _read_csv_rows(csv_path)
+
+    assert rows[0]["Section"] == "Tagger Speed"
+    assert rows[0]["Item"] == "aggregate"
