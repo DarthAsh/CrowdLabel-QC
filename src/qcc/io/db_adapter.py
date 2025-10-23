@@ -72,6 +72,9 @@ class DBAdapter:
         taggers = self._build_taggers(metadata, assignments)
         characteristics = self._build_characteristics(metadata)
         answers = self._build_answers(metadata)
+        prompt_deployments = self._build_prompt_deployments(metadata)
+        prompts = self._build_prompts(metadata)
+        questions = self._build_questions(metadata)
 
         return {
             "assignments": assignments,
@@ -79,6 +82,9 @@ class DBAdapter:
             "taggers": taggers,
             "characteristics": characteristics,
             "answers": answers,
+            "prompt_deployments": prompt_deployments,
+            "prompts": prompts,
+            "questions": questions,
         }
 
     # ------------------------------------------------------------------
@@ -96,6 +102,9 @@ class DBAdapter:
         """
 
         answers_lookup: Dict[str, Mapping[str, Any]] = {}
+        deployments_lookup: Dict[str, Mapping[str, Any]] = {}
+        prompts_lookup: Dict[str, Mapping[str, Any]] = {}
+        questions_lookup: Dict[str, Mapping[str, Any]] = {}
         if table_data:
             answers_rows = table_data.get("answers") or []
             for answer in answers_rows:
@@ -106,6 +115,36 @@ class DBAdapter:
                 if answer_id in (None, ""):
                     continue
                 answers_lookup[str(answer_id)] = answer
+
+            deployments_rows = table_data.get("tag_prompt_deployments") or []
+            for deployment in deployments_rows:
+                deployment_id = self._extract_optional(
+                    deployment,
+                    ["id", "tag_prompt_deployment_id", "tagPromptDeploymentId"],
+                )
+                if deployment_id in (None, ""):
+                    continue
+                deployments_lookup[str(deployment_id)] = deployment
+
+            prompts_rows = table_data.get("tag_prompts") or []
+            for prompt in prompts_rows:
+                prompt_id = self._extract_optional(
+                    prompt,
+                    ["id", "tag_prompt_id", "tagPromptId"],
+                )
+                if prompt_id in (None, ""):
+                    continue
+                prompts_lookup[str(prompt_id)] = prompt
+
+            questions_rows = table_data.get("questions") or []
+            for question in questions_rows:
+                question_id = self._extract_optional(
+                    question,
+                    ["id", "question_id", "questionId"],
+                )
+                if question_id in (None, ""):
+                    continue
+                questions_lookup[str(question_id)] = question
 
         assignments: List[TagAssignment] = []
         assignments_by_comment: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
@@ -132,6 +171,7 @@ class DBAdapter:
 
             comment_id = assignment.comment_id
             answer_row = answers_lookup.get(comment_id)
+            comment_entry = comment_meta.get(comment_id)
             comment_text = None
             prompt_id: Optional[Any] = None
             question_id: Optional[Any] = None
@@ -156,38 +196,140 @@ class DBAdapter:
             if not comment_text:
                 comment_text = comment_id
 
+            deployment_row = deployments_lookup.get(assignment.characteristic_id)
+            deployment_prompt_id: Optional[Any] = None
+            deployment_question_id: Optional[Any] = None
+            deployment_questionnaire_id: Optional[Any] = None
+            deployment_question_type: Optional[Any] = None
+
+            if deployment_row:
+                deployment_prompt_id = self._extract_optional(
+                    deployment_row,
+                    ["tag_prompt_id", "tagPromptId", "prompt_id", "promptId"],
+                )
+                deployment_question_id = self._extract_optional(
+                    deployment_row,
+                    ["assignment_id", "question_id", "questionId"],
+                )
+                deployment_questionnaire_id = self._extract_optional(
+                    deployment_row,
+                    ["questionnaire_id", "questionnaireId"],
+                )
+                deployment_question_type = self._extract_optional(
+                    deployment_row,
+                    ["question_type", "questionType"],
+                )
+
             if prompt_id in (None, ""):
                 prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
             if prompt_id in (None, ""):
+                prompt_id = deployment_prompt_id
+            if prompt_id in (None, ""):
                 prompt_id = question_id or response_id or "unknown_prompt"
 
-            comment_meta[comment_id] = {
-                "text": str(comment_text),
-                "prompt_id": str(prompt_id) if prompt_id not in (None, "") else "unknown_prompt",
-                "question_id": str(question_id) if question_id not in (None, "") else None,
-                "response_id": str(response_id) if response_id not in (None, "") else None,
-                "answer_value": answer_value,
-            }
+            if question_id in (None, "") and deployment_question_id not in (None, ""):
+                question_id = deployment_question_id
+
+            comment_meta_entry = comment_entry or {}
+            comment_meta_entry.setdefault("text", str(comment_text))
+            comment_meta_entry.setdefault(
+                "prompt_id",
+                str(prompt_id) if prompt_id not in (None, "") else "unknown_prompt",
+            )
+            comment_meta_entry.setdefault(
+                "question_id",
+                str(question_id) if question_id not in (None, "") else None,
+            )
+            comment_meta_entry.setdefault(
+                "response_id",
+                str(response_id) if response_id not in (None, "") else None,
+            )
+            comment_meta_entry.setdefault("answer_value", answer_value)
+            if deployment_questionnaire_id not in (None, ""):
+                comment_meta_entry.setdefault(
+                    "questionnaire_id", str(deployment_questionnaire_id)
+                )
+            if deployment_question_type not in (None, ""):
+                comment_meta_entry.setdefault(
+                    "question_type", str(deployment_question_type)
+                )
+            question_row = None
+            if question_id not in (None, ""):
+                question_row = questions_lookup.get(str(question_id))
+            if question_row:
+                question_text = self._extract_optional(
+                    question_row,
+                    ["txt", "text", "question", "prompt"],
+                )
+                if question_text:
+                    comment_meta_entry.setdefault("question_text", str(question_text))
+
+            comment_meta[comment_id] = comment_meta_entry
 
             characteristic_id = assignment.characteristic_id
-            characteristic_name = self._extract_optional(
-                row,
-                [
-                    "characteristic_name",
-                    "characteristic",
-                    "tag_prompt_characteristic",
-                ],
-            )
+            char_entry = characteristic_meta.setdefault(characteristic_id, {})
+            characteristic_name = char_entry.get("name")
+            if not characteristic_name:
+                characteristic_name = self._extract_optional(
+                    row,
+                    [
+                        "characteristic_name",
+                        "characteristic",
+                        "tag_prompt_characteristic",
+                    ],
+                )
+            prompt_row = None
+            if deployment_prompt_id not in (None, ""):
+                prompt_row = prompts_lookup.get(str(deployment_prompt_id))
+            if prompt_row:
+                prompt_label = self._extract_optional(
+                    prompt_row,
+                    ["prompt", "name", "label", "text"],
+                )
+                if prompt_label:
+                    characteristic_name = prompt_label
+                prompt_description = self._extract_optional(
+                    prompt_row,
+                    ["desc", "description"],
+                )
+                if prompt_description and not char_entry.get("description"):
+                    char_entry["description"] = prompt_description
+                control_type = self._extract_optional(
+                    prompt_row,
+                    ["control_type", "controlType"],
+                )
+                if control_type:
+                    char_entry.setdefault("control_type", str(control_type))
+
+            if deployment_question_id not in (None, ""):
+                char_entry.setdefault("question_id", str(deployment_question_id))
+            if deployment_questionnaire_id not in (None, ""):
+                char_entry.setdefault(
+                    "questionnaire_id", str(deployment_questionnaire_id)
+                )
+            if deployment_question_type not in (None, ""):
+                char_entry.setdefault("question_type", str(deployment_question_type))
+            if question_row:
+                question_text = self._extract_optional(
+                    question_row,
+                    ["txt", "text", "question", "prompt"],
+                )
+                if question_text:
+                    char_entry.setdefault("question_text", str(question_text))
+
             if not characteristic_name:
                 characteristic_name = characteristic_id
-            characteristic_description = self._extract_optional(
-                row,
-                ["characteristic_description", "description"],
-            )
-            characteristic_meta[characteristic_id] = {
-                "name": characteristic_name,
-                "description": characteristic_description,
-            }
+
+            characteristic_description = char_entry.get("description")
+            if not characteristic_description:
+                characteristic_description = self._extract_optional(
+                    row,
+                    ["characteristic_description", "description"],
+                )
+                if characteristic_description:
+                    char_entry.setdefault("description", characteristic_description)
+
+            char_entry.setdefault("name", str(characteristic_name))
 
             tagger_id = assignment.tagger_id
             tagger_entry = tagger_meta.setdefault(tagger_id, {})
@@ -202,6 +344,9 @@ class DBAdapter:
             "characteristic_meta": characteristic_meta,
             "tagger_meta": tagger_meta,
             "answers_by_id": answers_lookup,
+            "deployments_by_id": deployments_lookup,
+            "prompts_by_id": prompts_lookup,
+            "questions_by_id": questions_lookup,
         }
         return assignments, metadata
 
@@ -280,6 +425,9 @@ class DBAdapter:
                     "response_id": str(response_id) if response_id not in (None, "") else None,
                     "text": str(text),
                     "answer_value": answer_value,
+                    "questionnaire_id": info.get("questionnaire_id"),
+                    "question_type": info.get("question_type"),
+                    "question_text": info.get("question_text"),
                 }
             )
 
@@ -292,10 +440,115 @@ class DBAdapter:
                         "response_id": info.get("response_id"),
                         "text": str(info.get("text", answer_id)),
                         "answer_value": info.get("answer_value"),
+                        "questionnaire_id": info.get("questionnaire_id"),
+                        "question_type": info.get("question_type"),
+                        "question_text": info.get("question_text"),
                     }
                 )
 
         return answers
+
+    def _build_prompts(self, metadata: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        prompts_by_id: Mapping[str, Mapping[str, Any]] = metadata.get("prompts_by_id", {})
+        prompts: List[Dict[str, Any]] = []
+        for prompt_id, row in prompts_by_id.items():
+            prompts.append(
+                {
+                    "id": prompt_id,
+                    "prompt": self._extract_optional(
+                        row, ["prompt", "name", "label", "text"]
+                    )
+                    or prompt_id,
+                    "description": self._extract_optional(
+                        row, ["desc", "description"]
+                    ),
+                    "control_type": self._extract_optional(
+                        row, ["control_type", "controlType"]
+                    ),
+                    "created_at": row.get("created_at") or row.get("createdAt"),
+                    "updated_at": row.get("updated_at") or row.get("updatedAt"),
+                }
+            )
+        return prompts
+
+    def _build_prompt_deployments(self, metadata: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        deployments_by_id: Mapping[str, Mapping[str, Any]] = metadata.get(
+            "deployments_by_id", {}
+        )
+        prompts_by_id: Mapping[str, Mapping[str, Any]] = metadata.get("prompts_by_id", {})
+        questions_by_id: Mapping[str, Mapping[str, Any]] = metadata.get(
+            "questions_by_id", {}
+        )
+
+        deployments: List[Dict[str, Any]] = []
+        for deployment_id, row in deployments_by_id.items():
+            prompt_id = self._extract_optional(
+                row, ["tag_prompt_id", "tagPromptId", "prompt_id", "promptId"]
+            )
+            question_id = self._extract_optional(
+                row, ["assignment_id", "question_id", "questionId"]
+            )
+            questionnaire_id = self._extract_optional(
+                row, ["questionnaire_id", "questionnaireId"]
+            )
+            question_type = self._extract_optional(
+                row, ["question_type", "questionType"]
+            )
+
+            prompt_row = prompts_by_id.get(str(prompt_id)) if prompt_id not in (None, "") else None
+            question_row = (
+                questions_by_id.get(str(question_id))
+                if question_id not in (None, "")
+                else None
+            )
+
+            deployments.append(
+                {
+                    "id": deployment_id,
+                    "prompt_id": str(prompt_id) if prompt_id not in (None, "") else None,
+                    "question_id": str(question_id) if question_id not in (None, "") else None,
+                    "questionnaire_id": str(questionnaire_id)
+                    if questionnaire_id not in (None, "")
+                    else None,
+                    "question_type": str(question_type)
+                    if question_type not in (None, "")
+                    else None,
+                    "prompt_label": self._extract_optional(
+                        prompt_row or {}, ["prompt", "name", "label", "text"]
+                    ),
+                    "question_text": self._extract_optional(
+                        question_row or {}, ["txt", "text", "question", "prompt"]
+                    ),
+                    "created_at": row.get("created_at") or row.get("createdAt"),
+                    "updated_at": row.get("updated_at") or row.get("updatedAt"),
+                }
+            )
+        return deployments
+
+    def _build_questions(self, metadata: Mapping[str, Any]) -> List[Dict[str, Any]]:
+        questions_by_id: Mapping[str, Mapping[str, Any]] = metadata.get(
+            "questions_by_id", {}
+        )
+        questions: List[Dict[str, Any]] = []
+        for question_id, row in questions_by_id.items():
+            questions.append(
+                {
+                    "id": question_id,
+                    "text": self._extract_optional(
+                        row, ["txt", "text", "question", "prompt"]
+                    )
+                    or question_id,
+                    "weight": row.get("weight"),
+                    "questionnaire_id": row.get("questionnaire_id")
+                    or row.get("questionnaireId"),
+                    "sequence": row.get("seq") or row.get("sequence"),
+                    "type": row.get("type"),
+                    "max_label": row.get("max_label"),
+                    "min_label": row.get("min_label"),
+                    "alternatives": row.get("alternatives"),
+                }
+            )
+        return questions
 
     def _row_to_assignment(self, row: Mapping[str, Any]) -> TagAssignment:
         tagger_id = str(

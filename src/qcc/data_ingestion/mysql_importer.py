@@ -11,6 +11,9 @@ from .mysql_config import MySQLConfig
 DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = (
     "answer_tags",
     "answers",
+    "tag_prompt_deployments",
+    "tag_prompts",
+    "questions",
 )
 
 

@@ -168,17 +168,29 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
     taggers = list(domain_objects.get("taggers", []) or [])
     characteristics = list(domain_objects.get("characteristics", []) or [])
     answers = list(domain_objects.get("answers", []) or [])
+    prompt_deployments = list(domain_objects.get("prompt_deployments", []) or [])
+    prompts = list(domain_objects.get("prompts", []) or [])
+    questions = list(domain_objects.get("questions", []) or [])
 
     total_assignments = len(assignments)
     total_comments = len(comments)
     total_answers = len(answers) if answers else total_comments
     total_taggers = len(taggers)
     total_characteristics = len(characteristics)
+    total_prompt_deployments = len(prompt_deployments)
+    total_prompts = len(prompts)
+    total_questions = len(questions)
 
     tag_value_counts = Counter(str(assignment.value) for assignment in assignments)
     characteristic_counts = Counter(assignment.characteristic_id for assignment in assignments)
     assignments_per_answer = {comment.id: len(comment.tagassignments) for comment in comments}
     tagger_activity = {tagger.id: len(tagger.tagassignments) for tagger in taggers}
+    characteristic_labels = {characteristic.id: characteristic.name for characteristic in characteristics}
+    prompt_control_types = Counter(
+        str(prompt.get("control_type"))
+        for prompt in prompts
+        if prompt.get("control_type") not in (None, "")
+    )
 
     unanswered_comments = [comment_id for comment_id, count in assignments_per_answer.items() if count == 0]
     question_ids = {answer.get("question_id") for answer in answers if answer.get("question_id")}
@@ -194,6 +206,12 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         "answer_tags": total_assignments,
         "answers": len(answers),
     }
+    if prompts:
+        table_row_counts["tag_prompts"] = len(prompts)
+    if prompt_deployments:
+        table_row_counts["tag_prompt_deployments"] = len(prompt_deployments)
+    if questions:
+        table_row_counts["questions"] = len(questions)
 
     return {
         "total_assignments": total_assignments,
@@ -201,6 +219,9 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         "total_comments": total_comments,
         "total_taggers": total_taggers,
         "total_characteristics": total_characteristics,
+        "total_prompt_deployments": total_prompt_deployments,
+        "total_prompts": total_prompts,
+        "total_questions": total_questions,
         "unique_questions": len(question_ids),
         "unique_responses": len(response_ids),
         "assignments_by_value": dict(tag_value_counts),
@@ -210,6 +231,8 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         "answers_without_tags": unanswered_comments,
         "average_tags_per_answer": average_tags_per_answer,
         "table_row_counts": table_row_counts,
+        "characteristic_labels": characteristic_labels,
+        "prompt_control_types": dict(prompt_control_types),
     }
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig

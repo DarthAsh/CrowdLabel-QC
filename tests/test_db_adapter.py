@@ -4,6 +4,7 @@ from datetime import datetime
 
 from qcc.cli.main import _build_summary
 from qcc.data_ingestion.mysql_config import MySQLConfig
+from qcc.data_ingestion.mysql_importer import DEFAULT_TAG_PROMPT_TABLES
 from qcc.io.db_adapter import DBAdapter
 from qcc.domain.enums import TagValue
 
@@ -27,7 +28,7 @@ class FakeImporter:
 def _make_adapter(tables):
     config = MySQLConfig(host="localhost", user="user", password="pw", database="db")
     importer = FakeImporter(tables)
-    return DBAdapter(config, importer=importer, tables=tuple(tables.keys()))
+    return DBAdapter(config, importer=importer, tables=DEFAULT_TAG_PROMPT_TABLES)
 
 
 def test_db_adapter_merges_answers_with_tags():
@@ -64,8 +65,48 @@ def test_db_adapter_merges_answers_with_tags():
             "created_at": datetime(2024, 1, 1, 12, 5, 0),
         },
     ]
+    tag_prompt_deployments = [
+        {
+            "id": 5,
+            "tag_prompt_id": 12,
+            "assignment_id": 7,
+            "questionnaire_id": 88,
+            "question_type": "boolean",
+            "created_at": datetime(2023, 12, 1, 0, 0, 0),
+            "updated_at": datetime(2023, 12, 2, 0, 0, 0),
+        }
+    ]
+    tag_prompts = [
+        {
+            "id": 12,
+            "prompt": "Spam?",
+            "desc": "Mark spam answers",
+            "control_type": "yes_no",
+            "created_at": datetime(2023, 11, 1, 0, 0, 0),
+            "updated_at": datetime(2023, 11, 2, 0, 0, 0),
+        }
+    ]
+    questions = [
+        {
+            "id": 7,
+            "txt": "Is this spam?",
+            "questionnaire_id": 88,
+            "seq": 1,
+            "type": "boolean",
+            "max_label": "Yes",
+            "min_label": "No",
+        }
+    ]
 
-    adapter = _make_adapter({"answer_tags": answer_tags, "answers": answers})
+    adapter = _make_adapter(
+        {
+            "answer_tags": answer_tags,
+            "answers": answers,
+            "tag_prompt_deployments": tag_prompt_deployments,
+            "tag_prompts": tag_prompts,
+            "questions": questions,
+        }
+    )
 
     domain_objects = adapter.read_domain_objects()
 
@@ -87,11 +128,34 @@ def test_db_adapter_merges_answers_with_tags():
     assert answers_output["102"]["question_id"] == "8"
     assert answers_output["101"]["text"] == "First answer"
 
+    characteristics = {c.id: c for c in domain_objects["characteristics"]}
+    assert characteristics["5"].name == "Spam?"
+
+    prompts = {prompt["id"]: prompt for prompt in domain_objects["prompts"]}
+    assert prompts["12"]["prompt"] == "Spam?"
+
+    deployments = {
+        deployment["id"]: deployment for deployment in domain_objects["prompt_deployments"]
+    }
+    assert deployments["5"]["question_id"] == "7"
+    assert deployments["5"]["prompt_label"] == "Spam?"
+
     summary = _build_summary(domain_objects)
     assert summary["total_assignments"] == 2
     assert summary["total_answers"] == 2
+    assert summary["total_prompts"] == 1
+    assert summary["total_prompt_deployments"] == 1
+    assert summary["total_questions"] == 1
     assert summary["assignments_by_value"] == {"YES": 1, "NO": 1}
-    assert summary["table_row_counts"] == {"answer_tags": 2, "answers": 2}
+    assert summary["characteristic_labels"] == {"5": "Spam?"}
+    assert summary["prompt_control_types"] == {"yes_no": 1}
+    assert summary["table_row_counts"] == {
+        "answer_tags": 2,
+        "answers": 2,
+        "tag_prompt_deployments": 1,
+        "tag_prompts": 1,
+        "questions": 1,
+    }
 
 
 def test_read_assignments_applies_limit():
