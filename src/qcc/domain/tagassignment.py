@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Set
 
 from qcc.domain.tagger import Tagger
 from qcc.domain.comment import Comment
@@ -33,15 +33,11 @@ class TagAssignment:
     
     def __post_init__(self) -> None:
         """Validate the tag assignment."""
-        if not self.tagger:
+        if not self.tagger_who_assigned:
             raise ValueError("tagger cannot be empty")
-        if not self.comment:
+        if not self.comment_assigned_for:
             raise ValueError("comment cannot be empty")
-        if not self.value:
+        if not self.characteristic_assigned_for:
             raise ValueError("characteristic cannot be empty")
-        if not self.timestamp:
+        if not self.assignment_time:
             raise ValueError("timestamp cannot be empty")
-        
-    def count_taggers_who_tagged_this_characteristic_for_this_comment(self, ):
-        # need other instances of tagger outside of the current tag assignment object
-        # db retrieval?
