@@ -3,11 +3,13 @@
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from statistics import mean, median
+from typing import Dict, Iterable, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import yaml
@@ -16,6 +18,7 @@ from qcc.config.schema import QCCConfig, InputConfig
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.io.csv_adapter import CSVAdapter
 from qcc.io.db_adapter import DBAdapter
+from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
 
 
 def main() -> int:
@@ -306,6 +309,55 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         else 0.0
     )
 
+    speed_strategy = LogTrimTaggingSpeed()
+    mean_log2_by_tagger: Dict[str, float] = {}
+    seconds_per_tag_by_tagger: Dict[str, float] = {}
+    seconds_samples = []
+
+    for tagger in taggers:
+        assignments_with_time = [
+            assignment
+            for assignment in (tagger.tagassignments or [])
+            if getattr(assignment, "timestamp", None) is not None
+        ]
+
+        if len(assignments_with_time) < 2:
+            continue
+
+        mean_log2 = speed_strategy.speed_log2(tagger)
+        if not math.isfinite(mean_log2):
+            continue
+
+        seconds_value = speed_strategy.seconds_per_tag(mean_log2)
+        if not math.isfinite(seconds_value):
+            continue
+
+        mean_log2_by_tagger[tagger.id] = mean_log2
+        seconds_per_tag_by_tagger[tagger.id] = seconds_value
+        if seconds_value > 0:
+            seconds_samples.append(seconds_value)
+
+    if seconds_samples:
+        mean_seconds = mean(seconds_samples)
+        median_seconds = median(seconds_samples)
+        min_seconds = min(seconds_samples)
+        max_seconds = max(seconds_samples)
+    else:
+        mean_seconds = 0.0
+        median_seconds = 0.0
+        min_seconds = 0.0
+        max_seconds = 0.0
+
+    tagger_speed_metrics = {
+        "taggers_with_speed": len(mean_log2_by_tagger),
+        "mean_log2_by_tagger": mean_log2_by_tagger,
+        "seconds_per_tag_by_tagger": seconds_per_tag_by_tagger,
+        "mean_seconds_per_tag": mean_seconds,
+        "median_seconds_per_tag": median_seconds,
+        "min_seconds_per_tag": min_seconds,
+        "max_seconds_per_tag": max_seconds,
+    }
+
     table_row_counts = {
         "answer_tags": total_assignments,
         "answers": len(answers),
@@ -337,6 +389,7 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         "table_row_counts": table_row_counts,
         "characteristic_labels": characteristic_labels,
         "prompt_control_types": dict(prompt_control_types),
+        "tagger_speed_metrics": tagger_speed_metrics,
     }
 
 
@@ -347,12 +400,12 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
 
     for key, value in summary.items():
         if isinstance(value, dict):
-            for sub_key, sub_value in value.items():
+            for metric, metric_value in _flatten_dict_items("", value):
                 rows.append(
                     {
                         "section": key,
-                        "metric": str(sub_key),
-                        "value": _stringify_csv_value(sub_value),
+                        "metric": metric,
+                        "value": _stringify_csv_value(metric_value),
                     }
                 )
         elif isinstance(value, list):
@@ -380,6 +433,17 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
         writer = csv.DictWriter(csv_file, fieldnames=["section", "metric", "value"])
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _flatten_dict_items(prefix: str, value: Dict[str, object]) -> Iterable[Tuple[str, object]]:
+    """Yield flattened key/value pairs for nested dictionaries."""
+
+    for key, item in value.items():
+        metric_key = f"{prefix}.{key}" if prefix else str(key)
+        if isinstance(item, dict):
+            yield from _flatten_dict_items(metric_key, item)
+        else:
+            yield metric_key, item
 
 
 def _stringify_csv_value(value: object) -> str:
