@@ -45,10 +45,10 @@ def test_write_summary_creates_csv(tmp_path):
 
     rows = _read_csv_rows(csv_path)
     headers = rows[0].keys()
-    assert headers == {"Section", "Item", "Metric", "Value"}
+    assert headers == {"Strategy", "user_id", "Metric", "Value"}
 
     aggregate_rows = [
-        row for row in rows if row["Item"] == "aggregate" and row["Metric"].startswith("seconds_per_tag_")
+        row for row in rows if row["user_id"] == "aggregate" and row["Metric"].startswith("seconds_per_tag_")
     ]
     assert {row["Metric"] for row in aggregate_rows} == {
         "seconds_per_tag_mean",
@@ -57,7 +57,7 @@ def test_write_summary_creates_csv(tmp_path):
         "seconds_per_tag_max",
     }
 
-    per_tagger_rows = [row for row in rows if row["Item"] == "worker-1"]
+    per_tagger_rows = [row for row in rows if row["user_id"] == "worker-1"]
     per_tagger_metrics = {row["Metric"]: row["Value"] for row in per_tagger_rows}
     assert per_tagger_metrics == {
         "mean_log2": "3",
@@ -77,5 +77,5 @@ def test_write_summary_handles_missing_speed_data(tmp_path):
 
     rows = _read_csv_rows(csv_path)
 
-    assert rows[0]["Section"] == "Tagger Speed"
-    assert rows[0]["Item"] == "aggregate"
+    assert rows[0]["Strategy"] == "Tagger Speed"
+    assert rows[0]["user_id"] == "aggregate"

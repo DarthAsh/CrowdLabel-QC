@@ -342,8 +342,8 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
         taggers_with_speed = tagger_speed.get("taggers_with_speed", 0)
         rows.append(
             {
-                "Section": "Tagger Speed",
-                "Item": "aggregate",
+                "Strategy": "Tagger Speed",
+                "user_id": "aggregate",
                 "Metric": "taggers_with_speed",
                 "Value": _stringify_csv_value(taggers_with_speed),
             }
@@ -353,8 +353,8 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
         for metric_name, metric_value in seconds_section.items():
             rows.append(
                 {
-                    "Section": "Tagger Speed",
-                    "Item": "aggregate",
+                    "Strategy": "Tagger Speed",
+                    "user_id": "aggregate",
                     "Metric": f"seconds_per_tag_{metric_name}",
                     "Value": _stringify_csv_value(metric_value),
                 }
@@ -366,18 +366,18 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
                 if metric_name in tagger_entry:
                     rows.append(
                         {
-                            "Section": "Tagger Speed",
-                            "Item": tagger_id,
+                            "Strategy": "Tagger Speed",
+                            "user_id": tagger_id,
                             "Metric": metric_name,
                             "Value": _stringify_csv_value(tagger_entry[metric_name]),
                         }
                     )
 
     if not rows:
-        rows.append({"Section": "Tagger Speed", "Item": "aggregate", "Metric": "", "Value": ""})
+        rows.append({"Strategy": "Tagger Speed", "user_id": "aggregate", "Metric": "", "Value": ""})
 
     with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=["Section", "Item", "Metric", "Value"])
+        writer = csv.DictWriter(csv_file, fieldnames=["Strategy", "user_id", "Metric", "Value"])
         writer.writeheader()
         writer.writerows(rows)
 
