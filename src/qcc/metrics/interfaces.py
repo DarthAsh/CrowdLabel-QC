@@ -1,4 +1,5 @@
 from ..domain.enums import TagValue
+from utils.pattern import PatternCollection
 
 from __future__ import annotations
 
@@ -83,7 +84,7 @@ class PatternSignalsStrategy(Protocol):
         return assignment_str
     
     
-    def detect_pattern(self, pattern: str, assignment_sequence: str):
+    def count_pattern_repetition(self, pattern: str, assignment_sequence: str):
         """Function counts number of occurences of input pattern in the input assignment_sequence string
 
         Args:
@@ -101,3 +102,26 @@ class PatternSignalsStrategy(Protocol):
 
         return num_repeats
 
+    def generate_pattern_frequency(self, tag_assignments) -> Dict[str, int]:
+        """Function that creates a dictionary representing the number of times each pattern in PatternCollection is repeated
+        in tag_assignments
+
+        Args:
+            tag_assignments (list(TagAssignment)): list of TagAssignment objects to determine various pattern occurrences for
+
+        Returns:
+            Dict[str, int]: A dictionary such that the key represents a pattern, and the value represents the frequency of its occurrences.
+        """
+        assignment_sequence = self.build_sequence_str(tag_assignments)
+
+        all_patterns = PatternCollection.return_all_patterns()
+
+        # Create count dictionary
+        count = {}
+
+        # run loop to detect patterns
+        for pattern in all_patterns:
+            repeat_count = self.count_pattern_repetition(pattern, assignment_sequence)
+            count[pattern] = repeat_count
+
+        return count
