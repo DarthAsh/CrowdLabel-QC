@@ -1,16 +1,14 @@
-from ..domain.enums import TagValue
-from utils.pattern import PatternCollection
-
-from __future__ import annotations
-
 """Strategy interfaces for Tagger metrics.
 
 Protocols describe pure, deterministic, no-I/O strategy contracts. Use forward
 references for domain types to avoid circular imports.
 """
-
-from typing import Protocol, Any, Dict
+from __future__ import annotations
+from typing import Protocol, Dict
 import re
+
+from ..domain.enums import TagValue
+from .utils.pattern import PatternCollection
 
 
 class TaggingSpeedStrategy(Protocol):
