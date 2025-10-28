@@ -1,4 +1,3 @@
-from utils.pattern import Pattern, PatternCollection
 from __future__ import annotations
 from typing import Dict, Any
 from .interfaces import PatternSignalsStrategy
@@ -49,19 +48,8 @@ class VerticalPatternDetection(PatternSignalsStrategy):
             if assignment.characteristic == char:
                 char_assignments.append(assignment)
         
-        assignment_sequence = self.build_sequence_str(char_assignments)
+        return self.generate_pattern_frequency(char_assignments)
 
-        all_patterns = PatternCollection.return_all_patterns()
-
-        # Create count dictionary
-        count = {}
-
-        # run loop to detect patterns
-        for pattern in all_patterns:
-            repeat_count = self.detect_pattern(pattern, assignment_sequence)
-            count[pattern] = repeat_count
-
-        return count
     
 
 class HorizontalPatternDetection(PatternSignalsStrategy):
@@ -82,7 +70,7 @@ class HorizontalPatternDetection(PatternSignalsStrategy):
             dict: A dictionary such that the key represents a pattern, and the value represents the frequency of its occurrences.
         """
 
-        
+
         # Plan
         # Get list of TagAssignments for Tagger
         assignments = tagger.tagassignments
@@ -90,16 +78,4 @@ class HorizontalPatternDetection(PatternSignalsStrategy):
         # SORT assignments in ascending order (since I assume that that is how the student has assigned the tags)
         sorted_assignments = sorted(assignments, key = lambda ta: ta.timestamp)
         
-        assignment_sequence = self.build_sequence_str(sorted_assignments)
-
-        all_patterns = PatternCollection.return_all_patterns()
-
-        # Create count dictionary
-        count = {}
-
-        # run loop to detect patterns
-        for pattern in all_patterns:
-            repeat_count = self.detect_pattern(pattern, assignment_sequence)
-            count[pattern] = repeat_count
-
-        return count
+        return self.generate_pattern_frequency(sorted_assignments)
