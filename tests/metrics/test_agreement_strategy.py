@@ -2,46 +2,29 @@ from __future__ import annotations
 import datetime
 from typing import NamedTuple, Any
 import pytest
-from enum import Enum # Needed for TagValue definition
 
 # Import the class under test (the agreement metric implementation)
-from src.qcc.metrics.agreement_strategy import LatestLabelPercentAgreement
+from qcc.domain.tagassignment import TagAssignment
+from qcc.domain.characteristic import Characteristic
+from qcc.metrics.agreement_strategy import LatestLabelPercentAgreement
 # Import required domain model components
-from src.qcc.domain.tagger import Tagger
-from src.qcc.domain.enums import TagValue 
+from qcc.domain.tagger import Tagger
+from qcc.domain.enums import TagValue
 
-# --- Mocking Dependencies ---
 
-class MockAssignment(NamedTuple):
-    """
-    Mock class simulating the TagAssignment object required by the metric.
-    It includes necessary fields for characteristic filtering and time-based selection.
-    """
-    tagger_id: str
-    comment_id: str      # The Unit ID (item being rated)
-    value: Any           # The assigned category value (using TagValue Enum members)
-    timestamp: datetime.datetime
-    characteristic_id: str = "CHAR_1" # Default ID for testing
-    is_na: bool = False # Legacy/unused flag, primary NA handling is via 'value' check
-
-class MockCharacteristic:
-    """
-    Mock class simulating the Characteristic object, primarily used to pass the ID
-    to the metric's methods for filtering.
-    """
-    def __init__(self, id: str):
-        self.id = id
-        
-def ts(minutes: int):
+def ts(minutes: int) -> datetime.datetime:
     """Helper function to create deterministic, comparable timestamps."""
     return datetime.datetime(2025, 1, 1, 10, minutes)
 
+
 # Create a constant characteristic object used across most tests
-TEST_CHAR = MockCharacteristic(id="CHAR_1")
+TEST_CHAR = Characteristic(id="CHAR_1", name="Test_Char", description=None)
+
 
 def make_empty_tagger() -> Tagger:
-    """Helper to create a mock Tagger instance."""
+    """Helper to create a Tagger instance."""
     return Tagger(id="t0", meta=None, tagassignments=[])
+
 
 # --- Test Cases ---
 
@@ -52,16 +35,23 @@ def test_perfect_agreement():
     """
     assignments = [
         # Unit 1: Three raters agree on YES
-        MockAssignment('A', 'U1', TagValue.YES, ts(1)),
-        MockAssignment('B', 'U1', TagValue.YES, ts(1)),
-        MockAssignment('C', 'U1', TagValue.YES, ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1', 
+                     value=TagValue.YES, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
         # Unit 2: Three raters agree on NO
-        MockAssignment('A', 'U2', TagValue.NO, ts(1)),
-        MockAssignment('B', 'U2', TagValue.NO, ts(1)),
-        MockAssignment('C', 'U2', TagValue.NO, ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
     ]
     result = LatestLabelPercentAgreement.krippendorff_alpha(assignments, TEST_CHAR)
     assert result == 1.0
+
 
 def test_maximum_disagreement_or_chance():
     """
@@ -71,16 +61,23 @@ def test_maximum_disagreement_or_chance():
     """
     assignments = [
         # Unit 1: Raters use three different categories (YES, NO, UNCERTAIN)
-        MockAssignment('A', 'U1', TagValue.YES, ts(1)),
-        MockAssignment('B', 'U1', TagValue.NO, ts(1)),
-        MockAssignment('C', 'U1', TagValue.UNCERTAIN, ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.UNCERTAIN, timestamp=ts(1)),
         # Unit 2: Raters use the same three categories, shuffled
-        MockAssignment('A', 'U2', TagValue.NO, ts(1)),
-        MockAssignment('B', 'U2', TagValue.UNCERTAIN, ts(1)),
-        MockAssignment('C', 'U2', TagValue.YES, ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.UNCERTAIN, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
     ]
     result = LatestLabelPercentAgreement.krippendorff_alpha(assignments, TEST_CHAR)
     assert result == 0.0
+
 
 def test_mixed_agreement_verification():
     """
@@ -96,17 +93,24 @@ def test_mixed_agreement_verification():
     
     assignments = [
         # Unit 1: Two raters agree (YES), one disagrees (NO)
-        MockAssignment('A', 'U1', TagValue.YES, ts(1)),
-        MockAssignment('B', 'U1', TagValue.YES, ts(1)),
-        MockAssignment('C', 'U1', TagValue.NO, ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
         # Unit 2: Three raters agree (NO)
-        MockAssignment('A', 'U2', TagValue.NO, ts(1)),
-        MockAssignment('B', 'U2', TagValue.NO, ts(1)),
-        MockAssignment('C', 'U2', TagValue.NO, ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
     ]
     result = LatestLabelPercentAgreement.krippendorff_alpha(assignments, TEST_CHAR)
     # Use pytest.approx for floating point comparison with tolerance
     assert result == pytest.approx(0.645, abs=0.001)
+
 
 def test_with_missing_data():
     """
@@ -117,17 +121,24 @@ def test_with_missing_data():
     """
     assignments = [
         # Unit 1: Rater C's NA assignment is ignored, leaving only 2 raters (A, B) who agree
-        MockAssignment('A', 'U1', TagValue.YES, ts(1)),
-        MockAssignment('B', 'U1', TagValue.YES, ts(1)),
-        MockAssignment('C', 'U1', TagValue.NA, ts(1), is_na=True),
+        TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.NA, timestamp=ts(1)),
         # Unit 2: All 3 raters agree on NO
-        MockAssignment('A', 'U2', TagValue.NO, ts(1)),
-        MockAssignment('B', 'U2', TagValue.NO, ts(1)),
-        MockAssignment('C', 'U2', TagValue.NO, ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='B', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='C', comment_id='U2', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
     ]
     # Despite mixed categories across units, all *available* ratings have perfect internal agreement.
     result = LatestLabelPercentAgreement.krippendorff_alpha(assignments, TEST_CHAR)
     assert result == 1.0
+
 
 def test_latest_label_selection():
     """
@@ -137,15 +148,20 @@ def test_latest_label_selection():
     """
     assignments = [
         # Rater A submits NO, then YES (Latest is YES @ ts 5)
-        MockAssignment('A', 'U1', TagValue.NO, ts(1)),
-        MockAssignment('A', 'U1', TagValue.YES, ts(5)), 
+        TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(1)),
+        TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(5)), 
         # Rater B submits YES, then NO (Latest is NO @ ts 4)
-        MockAssignment('B', 'U1', TagValue.YES, ts(2)),
-        MockAssignment('B', 'U1', TagValue.NO, ts(4)), 
+        TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.YES, timestamp=ts(2)),
+        TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                     value=TagValue.NO, timestamp=ts(4)), 
     ]
     # Final Result: Rater A = YES, Rater B = NO. (Total disagreement for N=2 pairs).
     result = LatestLabelPercentAgreement.krippendorff_alpha(assignments, TEST_CHAR)
     assert result == 0.0
+
 
 def test_missing_characteristic_id():
     """
@@ -154,7 +170,89 @@ def test_missing_characteristic_id():
     """
     assignments = [
         # This assignment has an ID of "CHAR_2", but the test requests "CHAR_1"
-        MockAssignment('A', 'U1', TagValue.YES, ts(1), characteristic_id="CHAR_2"),
+        TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_2',
+                     value=TagValue.YES, timestamp=ts(1)),
     ]
     result = LatestLabelPercentAgreement.krippendorff_alpha(assignments, TEST_CHAR)
     assert result is None
+
+
+def test_pairwise_perfect_agreement():
+    """
+    Tests the pairwise agreement metric when two taggers agree perfectly.
+    """
+    tagger_a = Tagger(
+        id='A',
+        tagassignments=[
+            TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                         value=TagValue.YES, timestamp=ts(1)),
+            TagAssignment(tagger_id='A', comment_id='U2', characteristic_id='CHAR_1',
+                         value=TagValue.NO, timestamp=ts(1)),
+        ]
+    )
+    tagger_b = Tagger(
+        id='B',
+        tagassignments=[
+            TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                         value=TagValue.YES, timestamp=ts(1)),
+            TagAssignment(tagger_id='B', comment_id='U2', characteristic_id='CHAR_1',
+                         value=TagValue.NO, timestamp=ts(1)),
+        ]
+    )
+    
+    metric = LatestLabelPercentAgreement()
+    result = metric.pairwise(tagger_a, tagger_b, TEST_CHAR)
+    assert result == 1.0
+
+
+def test_pairwise_no_overlap():
+    """
+    Tests the pairwise agreement metric when taggers have no overlapping comments.
+    Should return 0.0 when there's no overlap to compare.
+    """
+    tagger_a = Tagger(
+        id='A',
+        tagassignments=[
+            TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                         value=TagValue.YES, timestamp=ts(1)),
+        ]
+    )
+    tagger_b = Tagger(
+        id='B',
+        tagassignments=[
+            TagAssignment(tagger_id='B', comment_id='U2', characteristic_id='CHAR_1',
+                         value=TagValue.NO, timestamp=ts(1)),
+        ]
+    )
+    
+    metric = LatestLabelPercentAgreement()
+    result = metric.pairwise(tagger_a, tagger_b, TEST_CHAR)
+    assert result == 0.0
+
+
+def test_pairwise_partial_agreement():
+    """
+    Tests the pairwise agreement metric with partial agreement (50%).
+    """
+    tagger_a = Tagger(
+        id='A',
+        tagassignments=[
+            TagAssignment(tagger_id='A', comment_id='U1', characteristic_id='CHAR_1',
+                         value=TagValue.YES, timestamp=ts(1)),
+            TagAssignment(tagger_id='A', comment_id='U2', characteristic_id='CHAR_1',
+                         value=TagValue.NO, timestamp=ts(1)),
+        ]
+    )
+    tagger_b = Tagger(
+        id='B',
+        tagassignments=[
+            TagAssignment(tagger_id='B', comment_id='U1', characteristic_id='CHAR_1',
+                         value=TagValue.YES, timestamp=ts(1)),
+            TagAssignment(tagger_id='B', comment_id='U2', characteristic_id='CHAR_1',
+                         value=TagValue.YES, timestamp=ts(1)),  # Disagrees on U2
+        ]
+    )
+    
+    metric = LatestLabelPercentAgreement()
+    result = metric.pairwise(tagger_a, tagger_b, TEST_CHAR)
+    assert result == 0.5
