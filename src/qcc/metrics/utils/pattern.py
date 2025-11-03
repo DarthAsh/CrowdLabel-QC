@@ -17,11 +17,13 @@ from qcc.domain.enums import TagValue
 
 class PatternCollection:
     # Added NYYN as four_length_pattern as well
-    two_length_patterns = ["YY", "NN"]
+    one_length_patterns = ["Y", "N"]
 
-    three_length_patterns = ["YNY", "NYN"]
+    two_length_patterns = ["YN"]
 
-    four_length_patterns = ["YNYN", "YNNY", "NYYN"]
+    three_length_patterns = ["YNY", "YNN"]
+
+    four_length_patterns = ["YNNY", "YYYN", "YNNN"]
 
     @classmethod
     def return_all_patterns(cls):
