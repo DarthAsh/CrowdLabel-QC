@@ -289,7 +289,7 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         positive_patterns = {
             pattern: count
             for pattern, count in (pattern_counts or {}).items()
-            if count > 1 and len(pattern) > 1
+            if count > 0
         }
         if positive_patterns:
             taggers_with_patterns += 1
@@ -424,8 +424,6 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
                 "Value": _stringify_csv_value(
                     pattern_summary.get("taggers_with_patterns", 0)
                 ),
-                "pattern_detected": "",
-                "pattern_value": "",
             }
         )
 
@@ -435,10 +433,8 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
                 {
                     "Strategy": "Pattern Detection",
                     "user_id": "aggregate",
-                    "Metric": "pattern_count",
+                    "Metric": f"pattern_{pattern}",
                     "Value": _stringify_csv_value(count),
-                    "pattern_detected": pattern,
-                    "pattern_value": _stringify_csv_value(count),
                 }
             )
 
@@ -449,10 +445,8 @@ def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
                     {
                         "Strategy": "Pattern Detection",
                         "user_id": tagger_id,
-                        "Metric": "pattern_count",
+                        "Metric": f"pattern_{pattern}",
                         "Value": _stringify_csv_value(count),
-                        "pattern_detected": pattern,
-                        "pattern_value": _stringify_csv_value(count),
                     }
                 )
 
