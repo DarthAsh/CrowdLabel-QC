@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import csv
 import math
-from collections import defaultdict
 from pathlib import Path
-from statistics import mean, median
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Sequence, Tuple
 
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.tagassignment import TagAssignment
@@ -69,7 +67,6 @@ class TaggerPerformanceReport:
     def _generate_speed_summary(self, taggers: Sequence[Tagger]) -> Dict[str, object]:
         speed_strategy = LogTrimTaggingSpeed()
         per_tagger_speed: List[Dict[str, object]] = []
-        seconds_samples: List[float] = []
 
         for tagger in taggers:
             assignments_with_time = [
@@ -98,29 +95,8 @@ class TaggerPerformanceReport:
                 }
             )
 
-            if seconds_value > 0:
-                seconds_samples.append(seconds_value)
-
-        if seconds_samples:
-            mean_seconds = mean(seconds_samples)
-            median_seconds = median(seconds_samples)
-            min_seconds = min(seconds_samples)
-            max_seconds = max(seconds_samples)
-        else:
-            mean_seconds = 0.0
-            median_seconds = 0.0
-            min_seconds = 0.0
-            max_seconds = 0.0
-
         return {
             "strategy": "LogTrimTaggingSpeed",
-            "taggers_with_speed": len(per_tagger_speed),
-            "seconds_per_tag": {
-                "mean": mean_seconds,
-                "median": median_seconds,
-                "min": min_seconds,
-                "max": max_seconds,
-            },
             "per_tagger": per_tagger_speed,
         }
 
@@ -128,8 +104,6 @@ class TaggerPerformanceReport:
         pattern_strategy = HorizontalPatternDetection()
         tracked_patterns = PatternCollection.return_all_patterns()
         per_tagger_patterns: List[Dict[str, object]] = []
-        aggregate_pattern_counts: MutableMapping[str, int] = defaultdict(int)
-        taggers_with_patterns = 0
 
         for tagger in taggers:
             pattern_counts = pattern_strategy.analyze(tagger)
@@ -142,7 +116,6 @@ class TaggerPerformanceReport:
             if not positive_patterns:
                 continue
 
-            taggers_with_patterns += 1
             per_tagger_patterns.append(
                 {
                     "tagger_id": str(tagger.id),
@@ -150,14 +123,9 @@ class TaggerPerformanceReport:
                 }
             )
 
-            for pattern, count in positive_patterns.items():
-                aggregate_pattern_counts[pattern] += count
-
         return {
             "strategy": "HorizontalPatternDetection",
             "patterns_tracked": tracked_patterns,
-            "taggers_with_patterns": taggers_with_patterns,
-            "aggregate_counts": dict(sorted(aggregate_pattern_counts.items())),
             "per_tagger": per_tagger_patterns,
         }
 
@@ -172,34 +140,11 @@ class TaggerPerformanceReport:
             return row
 
         if not summary:
-            rows["aggregate"] = {"user_id": "aggregate"}
-            return [rows["aggregate"]], ["user_id"]
+            return [], ["user_id"]
 
         tagger_speed = summary.get("tagger_speed", {}) if summary else {}
         if isinstance(tagger_speed, Mapping) and tagger_speed:
             strategy = tagger_speed.get("strategy")
-            aggregate_row = _row_for("aggregate")
-            if strategy:
-                aggregate_row["speed_strategy"] = str(strategy)
-                all_columns.add("speed_strategy")
-
-            taggers_with_speed = tagger_speed.get("taggers_with_speed")
-            if taggers_with_speed is not None:
-                aggregate_row["speed_taggers_with_speed"] = self._stringify_csv_value(
-                    taggers_with_speed
-                )
-                all_columns.add("speed_taggers_with_speed")
-
-            seconds_section = tagger_speed.get("seconds_per_tag", {}) or {}
-            if isinstance(seconds_section, Mapping):
-                for metric_name in ("mean", "median", "min", "max"):
-                    if metric_name in seconds_section:
-                        column = f"speed_seconds_per_tag_{metric_name}"
-                        aggregate_row[column] = self._stringify_csv_value(
-                            seconds_section[metric_name]
-                        )
-                        all_columns.add(column)
-
             per_tagger = tagger_speed.get("per_tagger", []) or []
             for tagger_entry in per_tagger:
                 if not isinstance(tagger_entry, Mapping):
@@ -226,32 +171,6 @@ class TaggerPerformanceReport:
         pattern_summary = summary.get("pattern_detection", {}) if summary else {}
         if isinstance(pattern_summary, Mapping) and pattern_summary:
             strategy = pattern_summary.get("strategy")
-            aggregate_row = _row_for("aggregate")
-            if strategy:
-                aggregate_row["pattern_strategy"] = str(strategy)
-                all_columns.add("pattern_strategy")
-
-            patterns_tracked = pattern_summary.get("patterns_tracked")
-            if patterns_tracked:
-                aggregate_row["pattern_patterns_tracked"] = ";".join(
-                    str(pattern) for pattern in patterns_tracked
-                )
-                all_columns.add("pattern_patterns_tracked")
-
-            taggers_with_patterns = pattern_summary.get("taggers_with_patterns")
-            if taggers_with_patterns is not None:
-                aggregate_row["pattern_taggers_with_patterns"] = self._stringify_csv_value(
-                    taggers_with_patterns
-                )
-                all_columns.add("pattern_taggers_with_patterns")
-
-            aggregate_counts = pattern_summary.get("aggregate_counts", {}) or {}
-            if isinstance(aggregate_counts, Mapping):
-                for pattern, count in aggregate_counts.items():
-                    column = f"pattern_aggregate_count_{pattern}"
-                    aggregate_row[column] = self._stringify_csv_value(count)
-                    all_columns.add(column)
-
             per_tagger = pattern_summary.get("per_tagger", []) or []
             for entry in per_tagger:
                 if not isinstance(entry, Mapping):
@@ -270,12 +189,7 @@ class TaggerPerformanceReport:
                         tagger_row[column] = self._stringify_csv_value(count)
                         all_columns.add(column)
 
-        if not rows:
-            rows["aggregate"] = {"user_id": "aggregate"}
-
         ordered_rows: List[Dict[str, str]] = []
-        if "aggregate" in rows:
-            ordered_rows.append(rows.pop("aggregate"))
         for user_id in sorted(rows):
             ordered_rows.append(rows[user_id])
 
@@ -287,11 +201,6 @@ class TaggerPerformanceReport:
 
         for name in (
             "speed_strategy",
-            "speed_taggers_with_speed",
-            "speed_seconds_per_tag_mean",
-            "speed_seconds_per_tag_median",
-            "speed_seconds_per_tag_min",
-            "speed_seconds_per_tag_max",
             "speed_mean_log2",
             "speed_seconds_per_tag",
             "speed_timestamped_assignments",
@@ -300,18 +209,8 @@ class TaggerPerformanceReport:
 
         for name in (
             "pattern_strategy",
-            "pattern_patterns_tracked",
-            "pattern_taggers_with_patterns",
         ):
             _add_field(name)
-
-        pattern_aggregate_columns = sorted(
-            column
-            for column in all_columns
-            if column.startswith("pattern_aggregate_count_")
-        )
-        for column in pattern_aggregate_columns:
-            _add_field(column)
 
         pattern_columns = sorted(
             column for column in all_columns if column.startswith("pattern_count_")

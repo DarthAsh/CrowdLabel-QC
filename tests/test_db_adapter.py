@@ -155,7 +155,7 @@ def test_db_adapter_merges_answers_with_tags():
     assert "tagger_speed" in summary
     speed_summary = summary["tagger_speed"]
     assert speed_summary["strategy"] == "LogTrimTaggingSpeed"
-    assert "taggers_with_speed" in speed_summary
+    assert "per_tagger" in speed_summary
 
 
 def test_read_assignments_applies_limit():
@@ -274,11 +274,8 @@ def test_summary_includes_speed_metrics():
     )
 
     speed_metrics = summary["tagger_speed"]
-    assert speed_metrics["taggers_with_speed"] == 1
-    assert speed_metrics["seconds_per_tag"]["mean"] == pytest.approx(8.0)
-    assert speed_metrics["seconds_per_tag"]["median"] == pytest.approx(8.0)
-
     per_tagger = {entry["tagger_id"]: entry for entry in speed_metrics["per_tagger"]}
+    assert len(per_tagger) == 1
     assert per_tagger["42"]["mean_log2"] == pytest.approx(3.0)
     assert per_tagger["42"]["seconds_per_tag"] == pytest.approx(8.0)
 
@@ -355,9 +352,6 @@ def test_summary_includes_pattern_metrics(tmp_path):
         "YYYN",
         "YNNN",
     ]
-    assert pattern_summary["taggers_with_patterns"] == 1
-    assert pattern_summary["aggregate_counts"] == {"YN": 2}
-
     per_tagger = {entry["tagger_id"]: entry for entry in pattern_summary["per_tagger"]}
     assert per_tagger["42"]["patterns"] == {"YN": 2}
 
@@ -367,10 +361,7 @@ def test_summary_includes_pattern_metrics(tmp_path):
     with csv_path.open(newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
 
-    aggregate_row = next(row for row in rows if row["user_id"] == "aggregate")
-    assert aggregate_row["pattern_strategy"] == "HorizontalPatternDetection"
-    assert aggregate_row["pattern_taggers_with_patterns"] == "1"
-    assert aggregate_row["pattern_aggregate_count_YN"] == "2"
+    assert all(row["user_id"] != "aggregate" for row in rows)
 
     tagger_row = next(row for row in rows if row["user_id"] == "42")
     assert tagger_row["pattern_strategy"] == "HorizontalPatternDetection"
