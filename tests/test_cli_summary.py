@@ -45,7 +45,14 @@ def test_write_summary_creates_csv(tmp_path):
 
     rows = _read_csv_rows(csv_path)
     headers = rows[0].keys()
-    assert headers == {"Strategy", "user_id", "Metric", "Value"}
+    assert set(headers) == {
+        "Strategy",
+        "user_id",
+        "Metric",
+        "Value",
+        "pattern_detected",
+        "pattern_value",
+    }
 
     aggregate_rows = [
         row for row in rows if row["user_id"] == "aggregate" and row["Metric"].startswith("seconds_per_tag_")
@@ -65,6 +72,9 @@ def test_write_summary_creates_csv(tmp_path):
         "timestamped_assignments": "5",
     }
 
+    assert all(row["pattern_detected"] == "" for row in rows)
+    assert all(row["pattern_value"] == "" for row in rows)
+
 
 def test_write_summary_handles_missing_speed_data(tmp_path):
     output_dir = Path(tmp_path)
@@ -79,3 +89,5 @@ def test_write_summary_handles_missing_speed_data(tmp_path):
 
     assert rows[0]["Strategy"] == "Tagger Speed"
     assert rows[0]["user_id"] == "aggregate"
+    assert rows[0]["pattern_detected"] == ""
+    assert rows[0]["pattern_value"] == ""

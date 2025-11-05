@@ -1,10 +1,14 @@
 """Characteristic domain model for crowd labeling quality control."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import TYPE_CHECKING, Iterable, List, Optional
 
 from qcc.domain.enums import TagValue
-from qcc.domain.tagassignment import TagAssignment
+
+if TYPE_CHECKING:  # pragma: no cover - import for type checking only
+    from qcc.domain.tagassignment import TagAssignment
 
 
 @dataclass(frozen=True)
@@ -31,7 +35,7 @@ class Characteristic:
         if self.domain is None:
             object.__setattr__(self, 'domain', [TagValue.YES, TagValue.NO, TagValue.NA])
     
-    def num_unique_taggers(self, tagassignments: Iterable[TagAssignment]) -> int:
+    def num_unique_taggers(self, tagassignments: Iterable["TagAssignment"]) -> int:
         """Count the number of unique taggers for this characteristic.
         
         Args:
@@ -45,7 +49,7 @@ class Characteristic:
         # TODO: Implement filtering and counting logic
         raise NotImplementedError("num_unique_taggers not yet implemented")
     
-    def agreement_overall(self, tagassignments: Iterable[TagAssignment]) -> float:
+    def agreement_overall(self, tagassignments: Iterable["TagAssignment"]) -> float:
         """Calculate overall agreement for this characteristic.
         
         Args:
@@ -59,7 +63,7 @@ class Characteristic:
         # TODO: Implement agreement calculation logic
         raise NotImplementedError("agreement_overall not yet implemented")
     
-    def prevalence(self, tagassignments: Iterable[TagAssignment]) -> dict[TagValue, float]:
+    def prevalence(self, tagassignments: Iterable["TagAssignment"]) -> dict[TagValue, float]:
         """Calculate the prevalence of each tag value for this characteristic.
         
         Args:

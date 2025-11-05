@@ -1,14 +1,11 @@
 """Command-line interface for QCC (Quality Control of Crowd labeling)."""
 
 import argparse
-import csv
 import json
-import math
 import os
 import sys
 from pathlib import Path
-from statistics import mean, median
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 import yaml
@@ -17,7 +14,7 @@ from qcc.config.schema import QCCConfig, InputConfig
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.io.csv_adapter import CSVAdapter
 from qcc.io.db_adapter import DBAdapter
-from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
+from qcc.reports.tagger_performance import TaggerPerformanceReport
 
 
 def main() -> int:
@@ -267,129 +264,27 @@ def write_summary(result: dict, output_dir: Path) -> None:
 
 
 def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
-    """Aggregate a summary report containing tagging speed statistics only."""
+    """Aggregate a summary report using the reporting framework."""
 
     taggers = list(domain_objects.get("taggers", []) or [])
+    characteristics = list(domain_objects.get("characteristics", []) or [])
+    assignments = list(domain_objects.get("assignments", []) or [])
 
-    speed_strategy = LogTrimTaggingSpeed()
-    per_tagger_speed: List[Dict[str, object]] = []
-    seconds_samples = []
-
-    for tagger in taggers:
-        assignments_with_time = [
-            assignment
-            for assignment in (tagger.tagassignments or [])
-            if getattr(assignment, "timestamp", None) is not None
-        ]
-
-        if len(assignments_with_time) < 2:
-            continue
-
-        mean_log2 = speed_strategy.speed_log2(tagger)
-        if not math.isfinite(mean_log2):
-            continue
-
-        seconds_value = speed_strategy.seconds_per_tag(mean_log2)
-        if not math.isfinite(seconds_value):
-            continue
-
-        per_tagger_speed.append(
-            {
-                "tagger_id": str(tagger.id),
-                "mean_log2": mean_log2,
-                "seconds_per_tag": seconds_value,
-                "timestamped_assignments": len(assignments_with_time),
-            }
-        )
-        if seconds_value > 0:
-            seconds_samples.append(seconds_value)
-
-    if seconds_samples:
-        mean_seconds = mean(seconds_samples)
-        median_seconds = median(seconds_samples)
-        min_seconds = min(seconds_samples)
-        max_seconds = max(seconds_samples)
-    else:
-        mean_seconds = 0.0
-        median_seconds = 0.0
-        min_seconds = 0.0
-        max_seconds = 0.0
-
-    summary_seconds = {
-        "mean": mean_seconds,
-        "median": median_seconds,
-        "min": min_seconds,
-        "max": max_seconds,
-    }
-
-    return {
-        "tagger_speed": {
-            "strategy": "LogTrimTaggingSpeed",
-            "taggers_with_speed": len(per_tagger_speed),
-            "seconds_per_tag": summary_seconds,
-            "per_tagger": per_tagger_speed,
-        }
-    }
+    reporter = TaggerPerformanceReport(assignments)
+    return reporter.generate_summary_report(
+        taggers,
+        characteristics,
+        include_speed=True,
+        include_patterns=True,
+        include_agreement=False,
+    )
 
 
 def _write_summary_csv(summary: Dict[str, object], csv_path: Path) -> None:
-    """Write a CSV representation of the tagging speed summary."""
+    """Write a CSV representation of the summary report using the reporter."""
 
-    rows: List[Dict[str, str]] = []
-    tagger_speed = summary.get("tagger_speed", {}) if summary else {}
-
-    if tagger_speed:
-        taggers_with_speed = tagger_speed.get("taggers_with_speed", 0)
-        rows.append(
-            {
-                "Strategy": "Tagger Speed",
-                "user_id": "aggregate",
-                "Metric": "taggers_with_speed",
-                "Value": _stringify_csv_value(taggers_with_speed),
-            }
-        )
-
-        seconds_section = tagger_speed.get("seconds_per_tag", {}) or {}
-        for metric_name, metric_value in seconds_section.items():
-            rows.append(
-                {
-                    "Strategy": "Tagger Speed",
-                    "user_id": "aggregate",
-                    "Metric": f"seconds_per_tag_{metric_name}",
-                    "Value": _stringify_csv_value(metric_value),
-                }
-            )
-
-        for tagger_entry in tagger_speed.get("per_tagger", []) or []:
-            tagger_id = str(tagger_entry.get("tagger_id", ""))
-            for metric_name in ("mean_log2", "seconds_per_tag", "timestamped_assignments"):
-                if metric_name in tagger_entry:
-                    rows.append(
-                        {
-                            "Strategy": "Tagger Speed",
-                            "user_id": tagger_id,
-                            "Metric": metric_name,
-                            "Value": _stringify_csv_value(tagger_entry[metric_name]),
-                        }
-                    )
-
-    if not rows:
-        rows.append({"Strategy": "Tagger Speed", "user_id": "aggregate", "Metric": "", "Value": ""})
-
-    with open(csv_path, "w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=["Strategy", "user_id", "Metric", "Value"])
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-def _stringify_csv_value(value: object) -> str:
-    """Convert a summary value into a string suitable for CSV output."""
-
-    if value is None:
-        return ""
-    if isinstance(value, float):
-        return f"{value:.6f}".rstrip("0").rstrip(".") if not value.is_integer() else str(int(value))
-    return str(value)
+    reporter = TaggerPerformanceReport([])
+    reporter.export_to_csv(summary or {}, csv_path)
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig
 ) -> Tuple[dict, str]:
