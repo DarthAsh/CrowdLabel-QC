@@ -27,12 +27,23 @@ class PatternCollection:
 
     @classmethod
     def return_all_patterns(cls):
-        all_patterns = []
+        """Return a deterministic list of every tracked pattern string."""
 
-        all_patterns.extend(cls.two_length_patterns)
-        all_patterns.extend(cls.three_length_patterns)
-        all_patterns.extend(cls.four_length_patterns)
+        ordered_patterns = []
 
-        return all_patterns
+        ordered_patterns.extend(cls.one_length_patterns)
+        ordered_patterns.extend(cls.two_length_patterns)
+        ordered_patterns.extend(cls.three_length_patterns)
+        ordered_patterns.extend(cls.four_length_patterns)
+
+        # Remove duplicates while preserving declaration order.
+        seen = set()
+        unique_patterns = []
+        for pattern in ordered_patterns:
+            if pattern not in seen:
+                seen.add(pattern)
+                unique_patterns.append(pattern)
+
+        return unique_patterns
 
 # YY, NN, YNY, NYN, YNYN, YNNY)
