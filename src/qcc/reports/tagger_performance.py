@@ -7,7 +7,7 @@ import math
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, median
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.tagassignment import TagAssignment
@@ -58,22 +58,13 @@ class TaggerPerformanceReport:
         """Export summary report data to CSV format."""
 
         csv_path = Path(output_path)
-        rows = self._build_csv_rows(report_data)
+        rows, fieldnames = self._build_csv_rows(report_data)
 
         with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
-            writer = csv.DictWriter(
-                csv_file,
-                fieldnames=[
-                    "Strategy",
-                    "user_id",
-                    "Metric",
-                    "Value",
-                    "pattern_detected",
-                    "pattern_value",
-                ],
-            )
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(rows)
+            for row in rows:
+                writer.writerow({field: row.get(field, "") for field in fieldnames})
 
     def _generate_speed_summary(self, taggers: Sequence[Tagger]) -> Dict[str, object]:
         speed_strategy = LogTrimTaggingSpeed()
@@ -170,106 +161,169 @@ class TaggerPerformanceReport:
             "per_tagger": per_tagger_patterns,
         }
 
-    def _build_csv_rows(self, summary: Mapping[str, object]) -> List[Dict[str, str]]:
-        rows: List[Dict[str, str]] = []
-        tagger_speed = summary.get("tagger_speed", {}) if summary else {}
+    def _build_csv_rows(
+        self, summary: Mapping[str, object]
+    ) -> Tuple[List[Dict[str, str]], List[str]]:
+        rows: Dict[str, Dict[str, str]] = {}
+        all_columns: set[str] = {"user_id"}
 
-        if tagger_speed:
-            taggers_with_speed = tagger_speed.get("taggers_with_speed", 0)
-            rows.append(
-                {
-                    "Strategy": "Tagger Speed",
-                    "user_id": "aggregate",
-                    "Metric": "taggers_with_speed",
-                    "Value": self._stringify_csv_value(taggers_with_speed),
-                    "pattern_detected": "",
-                    "pattern_value": "",
-                }
-            )
+        def _row_for(user_id: str) -> Dict[str, str]:
+            row = rows.setdefault(user_id, {"user_id": user_id})
+            return row
+
+        if not summary:
+            rows["aggregate"] = {"user_id": "aggregate"}
+            return [rows["aggregate"]], ["user_id"]
+
+        tagger_speed = summary.get("tagger_speed", {}) if summary else {}
+        if isinstance(tagger_speed, Mapping) and tagger_speed:
+            strategy = tagger_speed.get("strategy")
+            aggregate_row = _row_for("aggregate")
+            if strategy:
+                aggregate_row["speed_strategy"] = str(strategy)
+                all_columns.add("speed_strategy")
+
+            taggers_with_speed = tagger_speed.get("taggers_with_speed")
+            if taggers_with_speed is not None:
+                aggregate_row["speed_taggers_with_speed"] = self._stringify_csv_value(
+                    taggers_with_speed
+                )
+                all_columns.add("speed_taggers_with_speed")
 
             seconds_section = tagger_speed.get("seconds_per_tag", {}) or {}
-            for metric_name, metric_value in seconds_section.items():
-                rows.append(
-                    {
-                        "Strategy": "Tagger Speed",
-                        "user_id": "aggregate",
-                        "Metric": f"seconds_per_tag_{metric_name}",
-                        "Value": self._stringify_csv_value(metric_value),
-                        "pattern_detected": "",
-                        "pattern_value": "",
-                    }
-                )
-
-            for tagger_entry in tagger_speed.get("per_tagger", []) or []:
-                tagger_id = str(tagger_entry.get("tagger_id", ""))
-                for metric_name in ("mean_log2", "seconds_per_tag", "timestamped_assignments"):
-                    if metric_name in tagger_entry:
-                        rows.append(
-                            {
-                                "Strategy": "Tagger Speed",
-                                "user_id": tagger_id,
-                                "Metric": metric_name,
-                                "Value": self._stringify_csv_value(tagger_entry[metric_name]),
-                                "pattern_detected": "",
-                                "pattern_value": "",
-                            }
+            if isinstance(seconds_section, Mapping):
+                for metric_name in ("mean", "median", "min", "max"):
+                    if metric_name in seconds_section:
+                        column = f"speed_seconds_per_tag_{metric_name}"
+                        aggregate_row[column] = self._stringify_csv_value(
+                            seconds_section[metric_name]
                         )
+                        all_columns.add(column)
+
+            per_tagger = tagger_speed.get("per_tagger", []) or []
+            for tagger_entry in per_tagger:
+                if not isinstance(tagger_entry, Mapping):
+                    continue
+                tagger_id = str(tagger_entry.get("tagger_id", "")).strip()
+                if not tagger_id:
+                    continue
+                tagger_row = _row_for(tagger_id)
+                if strategy:
+                    tagger_row["speed_strategy"] = str(strategy)
+                    all_columns.add("speed_strategy")
+                for metric_name in (
+                    "mean_log2",
+                    "seconds_per_tag",
+                    "timestamped_assignments",
+                ):
+                    if metric_name in tagger_entry:
+                        column = f"speed_{metric_name}"
+                        tagger_row[column] = self._stringify_csv_value(
+                            tagger_entry[metric_name]
+                        )
+                        all_columns.add(column)
 
         pattern_summary = summary.get("pattern_detection", {}) if summary else {}
-        if pattern_summary:
-            rows.append(
-                {
-                    "Strategy": "Pattern Detection",
-                    "user_id": "aggregate",
-                    "Metric": "taggers_with_patterns",
-                    "Value": self._stringify_csv_value(
-                        pattern_summary.get("taggers_with_patterns", 0)
-                    ),
-                    "pattern_detected": "",
-                    "pattern_value": "",
-                }
-            )
+        if isinstance(pattern_summary, Mapping) and pattern_summary:
+            strategy = pattern_summary.get("strategy")
+            aggregate_row = _row_for("aggregate")
+            if strategy:
+                aggregate_row["pattern_strategy"] = str(strategy)
+                all_columns.add("pattern_strategy")
+
+            patterns_tracked = pattern_summary.get("patterns_tracked")
+            if patterns_tracked:
+                aggregate_row["pattern_patterns_tracked"] = ";".join(
+                    str(pattern) for pattern in patterns_tracked
+                )
+                all_columns.add("pattern_patterns_tracked")
+
+            taggers_with_patterns = pattern_summary.get("taggers_with_patterns")
+            if taggers_with_patterns is not None:
+                aggregate_row["pattern_taggers_with_patterns"] = self._stringify_csv_value(
+                    taggers_with_patterns
+                )
+                all_columns.add("pattern_taggers_with_patterns")
 
             aggregate_counts = pattern_summary.get("aggregate_counts", {}) or {}
-            for pattern, count in aggregate_counts.items():
-                rows.append(
-                    {
-                        "Strategy": "Pattern Detection",
-                        "user_id": "aggregate",
-                        "Metric": "pattern_count",
-                        "Value": self._stringify_csv_value(count),
-                        "pattern_detected": pattern,
-                        "pattern_value": self._stringify_csv_value(count),
-                    }
-                )
+            if isinstance(aggregate_counts, Mapping):
+                for pattern, count in aggregate_counts.items():
+                    column = f"pattern_aggregate_count_{pattern}"
+                    aggregate_row[column] = self._stringify_csv_value(count)
+                    all_columns.add(column)
 
-            for entry in pattern_summary.get("per_tagger", []) or []:
-                tagger_id = str(entry.get("tagger_id", ""))
-                for pattern, count in (entry.get("patterns") or {}).items():
-                    rows.append(
-                        {
-                            "Strategy": "Pattern Detection",
-                            "user_id": tagger_id,
-                            "Metric": "pattern_count",
-                            "Value": self._stringify_csv_value(count),
-                            "pattern_detected": pattern,
-                            "pattern_value": self._stringify_csv_value(count),
-                        }
-                    )
+            per_tagger = pattern_summary.get("per_tagger", []) or []
+            for entry in per_tagger:
+                if not isinstance(entry, Mapping):
+                    continue
+                tagger_id = str(entry.get("tagger_id", "")).strip()
+                if not tagger_id:
+                    continue
+                tagger_row = _row_for(tagger_id)
+                if strategy:
+                    tagger_row["pattern_strategy"] = str(strategy)
+                    all_columns.add("pattern_strategy")
+                patterns = entry.get("patterns") or {}
+                if isinstance(patterns, Mapping):
+                    for pattern, count in patterns.items():
+                        column = f"pattern_count_{pattern}"
+                        tagger_row[column] = self._stringify_csv_value(count)
+                        all_columns.add(column)
 
         if not rows:
-            rows.append(
-                {
-                    "Strategy": "Tagger Speed",
-                    "user_id": "aggregate",
-                    "Metric": "",
-                    "Value": "",
-                    "pattern_detected": "",
-                    "pattern_value": "",
-                }
-            )
+            rows["aggregate"] = {"user_id": "aggregate"}
 
-        return rows
+        ordered_rows: List[Dict[str, str]] = []
+        if "aggregate" in rows:
+            ordered_rows.append(rows.pop("aggregate"))
+        for user_id in sorted(rows):
+            ordered_rows.append(rows[user_id])
+
+        fieldnames: List[str] = ["user_id"]
+
+        def _add_field(name: str) -> None:
+            if name in all_columns and name not in fieldnames:
+                fieldnames.append(name)
+
+        for name in (
+            "speed_strategy",
+            "speed_taggers_with_speed",
+            "speed_seconds_per_tag_mean",
+            "speed_seconds_per_tag_median",
+            "speed_seconds_per_tag_min",
+            "speed_seconds_per_tag_max",
+            "speed_mean_log2",
+            "speed_seconds_per_tag",
+            "speed_timestamped_assignments",
+        ):
+            _add_field(name)
+
+        for name in (
+            "pattern_strategy",
+            "pattern_patterns_tracked",
+            "pattern_taggers_with_patterns",
+        ):
+            _add_field(name)
+
+        pattern_aggregate_columns = sorted(
+            column
+            for column in all_columns
+            if column.startswith("pattern_aggregate_count_")
+        )
+        for column in pattern_aggregate_columns:
+            _add_field(column)
+
+        pattern_columns = sorted(
+            column for column in all_columns if column.startswith("pattern_count_")
+        )
+        for column in pattern_columns:
+            _add_field(column)
+
+        remaining = sorted(all_columns - set(fieldnames))
+        for column in remaining:
+            _add_field(column)
+
+        return ordered_rows, fieldnames
 
     @staticmethod
     def _stringify_csv_value(value: object) -> str:

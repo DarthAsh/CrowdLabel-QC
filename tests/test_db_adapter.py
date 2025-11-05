@@ -6,7 +6,6 @@ import pytest
 
 import csv
 
-from qcc.cli.main import _build_summary, _write_summary_csv
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.data_ingestion.mysql_importer import DEFAULT_TAG_PROMPT_TABLES
 from qcc.io.db_adapter import DBAdapter
@@ -14,6 +13,7 @@ from qcc.domain.enums import TagValue
 from qcc.domain.comment import Comment
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
+from qcc.reports.tagger_performance import TaggerPerformanceReport
 
 
 class FakeImporter:
@@ -147,7 +147,11 @@ def test_db_adapter_merges_answers_with_tags():
     assert deployments["5"]["question_id"] == "7"
     assert deployments["5"]["prompt_label"] == "Spam?"
 
-    summary = _build_summary(domain_objects)
+    report = TaggerPerformanceReport(domain_objects["assignments"])
+    summary = report.generate_summary_report(
+        domain_objects.get("taggers", []),
+        domain_objects.get("characteristics", []),
+    )
     assert "tagger_speed" in summary
     speed_summary = summary["tagger_speed"]
     assert speed_summary["strategy"] == "LogTrimTaggingSpeed"
@@ -263,7 +267,11 @@ def test_summary_includes_speed_metrics():
         "questions": [],
     }
 
-    summary = _build_summary(domain_objects)
+    report = TaggerPerformanceReport(domain_objects["assignments"])
+    summary = report.generate_summary_report(
+        domain_objects.get("taggers", []),
+        domain_objects.get("characteristics", []),
+    )
 
     speed_metrics = summary["tagger_speed"]
     assert speed_metrics["taggers_with_speed"] == 1
@@ -329,7 +337,11 @@ def test_summary_includes_pattern_metrics(tmp_path):
         "questions": [],
     }
 
-    summary = _build_summary(domain_objects)
+    report = TaggerPerformanceReport(domain_objects["assignments"])
+    summary = report.generate_summary_report(
+        domain_objects.get("taggers", []),
+        domain_objects.get("characteristics", []),
+    )
 
     pattern_summary = summary["pattern_detection"]
     assert pattern_summary["strategy"] == "HorizontalPatternDetection"
@@ -350,26 +362,19 @@ def test_summary_includes_pattern_metrics(tmp_path):
     assert per_tagger["42"]["patterns"] == {"YN": 2}
 
     csv_path = tmp_path / "summary.csv"
-    _write_summary_csv(summary, csv_path)
+    report.export_to_csv(summary, csv_path)
 
     with csv_path.open(newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
 
-    assert any(
-        row["Strategy"] == "Pattern Detection"
-        and row["user_id"] == "aggregate"
-        and row["Metric"] == "pattern_YN"
-        and row["Value"] == "2"
-        for row in rows
-    )
+    aggregate_row = next(row for row in rows if row["user_id"] == "aggregate")
+    assert aggregate_row["pattern_strategy"] == "HorizontalPatternDetection"
+    assert aggregate_row["pattern_taggers_with_patterns"] == "1"
+    assert aggregate_row["pattern_aggregate_count_YN"] == "2"
 
-    assert any(
-        row["Strategy"] == "Pattern Detection"
-        and row["user_id"] == "42"
-        and row["Metric"] == "pattern_YN"
-        and row["Value"] == "2"
-        for row in rows
-    )
+    tagger_row = next(row for row in rows if row["user_id"] == "42")
+    assert tagger_row["pattern_strategy"] == "HorizontalPatternDetection"
+    assert tagger_row["pattern_count_YN"] == "2"
 
 
 def test_db_adapter_handles_camel_cased_answer_identifiers():

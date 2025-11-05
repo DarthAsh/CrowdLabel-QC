@@ -46,34 +46,31 @@ def test_write_summary_creates_csv(tmp_path):
     rows = _read_csv_rows(csv_path)
     headers = rows[0].keys()
     assert set(headers) == {
-        "Strategy",
         "user_id",
-        "Metric",
-        "Value",
-        "pattern_detected",
-        "pattern_value",
+        "speed_strategy",
+        "speed_taggers_with_speed",
+        "speed_seconds_per_tag_mean",
+        "speed_seconds_per_tag_median",
+        "speed_seconds_per_tag_min",
+        "speed_seconds_per_tag_max",
+        "speed_mean_log2",
+        "speed_seconds_per_tag",
+        "speed_timestamped_assignments",
     }
 
-    aggregate_rows = [
-        row for row in rows if row["user_id"] == "aggregate" and row["Metric"].startswith("seconds_per_tag_")
-    ]
-    assert {row["Metric"] for row in aggregate_rows} == {
-        "seconds_per_tag_mean",
-        "seconds_per_tag_median",
-        "seconds_per_tag_min",
-        "seconds_per_tag_max",
-    }
+    aggregate_row = next(row for row in rows if row["user_id"] == "aggregate")
+    assert aggregate_row["speed_strategy"] == "LogTrimTaggingSpeed"
+    assert aggregate_row["speed_taggers_with_speed"] == "2"
+    assert aggregate_row["speed_seconds_per_tag_mean"] == "7.5"
+    assert aggregate_row["speed_seconds_per_tag_median"] == "7.5"
+    assert aggregate_row["speed_seconds_per_tag_min"] == "5"
+    assert aggregate_row["speed_seconds_per_tag_max"] == "10"
 
-    per_tagger_rows = [row for row in rows if row["user_id"] == "worker-1"]
-    per_tagger_metrics = {row["Metric"]: row["Value"] for row in per_tagger_rows}
-    assert per_tagger_metrics == {
-        "mean_log2": "3",
-        "seconds_per_tag": "8",
-        "timestamped_assignments": "5",
-    }
-
-    assert all(row["pattern_detected"] == "" for row in rows)
-    assert all(row["pattern_value"] == "" for row in rows)
+    worker_row = next(row for row in rows if row["user_id"] == "worker-1")
+    assert worker_row["speed_strategy"] == "LogTrimTaggingSpeed"
+    assert worker_row["speed_mean_log2"] == "3"
+    assert worker_row["speed_seconds_per_tag"] == "8"
+    assert worker_row["speed_timestamped_assignments"] == "5"
 
 
 def test_write_summary_handles_missing_speed_data(tmp_path):
@@ -87,7 +84,5 @@ def test_write_summary_handles_missing_speed_data(tmp_path):
 
     rows = _read_csv_rows(csv_path)
 
-    assert rows[0]["Strategy"] == "Tagger Speed"
     assert rows[0]["user_id"] == "aggregate"
-    assert rows[0]["pattern_detected"] == ""
-    assert rows[0]["pattern_value"] == ""
+    assert rows[0]["speed_strategy"] == "LogTrimTaggingSpeed"
