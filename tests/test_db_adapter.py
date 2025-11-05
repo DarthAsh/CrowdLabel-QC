@@ -403,3 +403,27 @@ def test_db_adapter_handles_camel_cased_answer_identifiers():
     assert answers_output[0]["id"] == "501"
     assert answers_output[0]["question_id"] == "321"
 
+
+def test_db_adapter_logs_invalid_rows(caplog):
+    caplog.set_level("ERROR")
+
+    tables = {
+        "answer_tags": [
+            {
+                "id": 1,
+                "answer_id": 101,
+                "tag_prompt_deployment_id": 5,
+                "user_id": "trouble-user",
+                # intentionally omit "value" to trigger a parsing error
+            }
+        ]
+    }
+
+    adapter = _make_adapter(tables)
+
+    with pytest.raises(ValueError):
+        adapter.read_assignments()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("user_id=trouble-user" in message for message in messages)
+

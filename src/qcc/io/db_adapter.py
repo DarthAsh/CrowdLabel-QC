@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, DefaultDict, Dict, Iterable, List, Mapping, Optional, Sequence
@@ -13,6 +14,9 @@ from qcc.domain.comment import Comment
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
 from qcc.domain.enums import TagValue
+
+
+logger = logging.getLogger(__name__)
 
 
 class DBAdapter:
@@ -160,6 +164,20 @@ class DBAdapter:
             try:
                 assignment = self._row_to_assignment(row)
             except (KeyError, ValueError, TypeError) as exc:  # pragma: no cover - defensive
+                user_identifier: Optional[Any]
+                try:
+                    user_identifier = self._extract_optional(
+                        row, ["tagger_id", "worker_id", "user_id"]
+                    )
+                except Exception:  # pragma: no cover - defensive fallback
+                    user_identifier = None
+                logger.error(
+                    "Unable to parse MySQL assignment row for user_id=%s (%s: %s)",
+                    user_identifier if user_identifier not in (None, "") else "<unknown>",
+                    type(exc).__name__,
+                    exc,
+                    exc_info=exc,
+                )
                 raise ValueError(f"Invalid assignment row: {row!r}") from exc
 
             if not isinstance(assignment, TagAssignment):  # pragma: no cover - defensive
