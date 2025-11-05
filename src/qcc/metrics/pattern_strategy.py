@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any
+from typing import Dict, Optional
 from .interfaces import PatternSignalsStrategy
 
 class VerticalPatternDetection(PatternSignalsStrategy):
@@ -20,7 +20,11 @@ class VerticalPatternDetection(PatternSignalsStrategy):
     # but students could also be tagging horizontally (in order to complete tagging for a review question before moving on to the next)
 
 
-    def analyze(self, tagger: "Tagger", char: "Characteristic") -> Dict[str, int]:
+    def analyze(
+        self,
+        tagger: "Tagger",
+        char: Optional["Characteristic"] = None,
+    ) -> Dict[str, int]:
         """
         Analyze the tagging sequence of a single Tagger for a single Characteristic
         to detect simple repetitive or suspicious patterns.
@@ -37,17 +41,35 @@ class VerticalPatternDetection(PatternSignalsStrategy):
 
         # Plan
         # Get list of TagAssignments for Tagger
-        assignments = tagger.tagassignments
+        if char is None:
+            return {}
+
+        assignments = list(tagger.tagassignments or [])
 
         # SORT assignments in ascending order (since I assume that that is how the student has assigned the tags)
-        sorted_assignments = sorted(assignments, key = lambda ta: ta.timestamp)
+        sorted_assignments = sorted(
+            assignments,
+            key=lambda ta: (
+                0,
+                getattr(ta, "timestamp", None),
+            )
+            if getattr(ta, "timestamp", None) is not None
+            else (1, 0),
+        )
 
         # Filter list to only contain TagAssignments for given Characteristic
         char_assignments = []
         for assignment in sorted_assignments:
-            if assignment.characteristic == char:
+            characteristic = getattr(assignment, "characteristic", None)
+            if characteristic is not None:
+                if characteristic == char:
+                    char_assignments.append(assignment)
+                    continue
+
+            characteristic_id = getattr(assignment, "characteristic_id", None)
+            if characteristic_id is not None and getattr(char, "id", None) == characteristic_id:
                 char_assignments.append(assignment)
-        
+
         return self.generate_pattern_frequency(char_assignments)
 
     
@@ -73,9 +95,17 @@ class HorizontalPatternDetection(PatternSignalsStrategy):
 
         # Plan
         # Get list of TagAssignments for Tagger
-        assignments = tagger.tagassignments
+        assignments = list(tagger.tagassignments or [])
 
         # SORT assignments in ascending order (since I assume that that is how the student has assigned the tags)
-        sorted_assignments = sorted(assignments, key = lambda ta: ta.timestamp)
-        
+        sorted_assignments = sorted(
+            assignments,
+            key=lambda ta: (
+                0,
+                getattr(ta, "timestamp", None),
+            )
+            if getattr(ta, "timestamp", None) is not None
+            else (1, 0),
+        )
+
         return self.generate_pattern_frequency(sorted_assignments)
