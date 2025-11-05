@@ -358,18 +358,16 @@ def test_summary_includes_pattern_metrics(tmp_path):
     assert any(
         row["Strategy"] == "Pattern Detection"
         and row["user_id"] == "aggregate"
-        and row["Metric"] == "pattern_count"
-        and row["pattern_detected"] == "YN"
-        and row["pattern_value"] == "2"
+        and row["Metric"] == "pattern_YN"
+        and row["Value"] == "2"
         for row in rows
     )
 
     assert any(
         row["Strategy"] == "Pattern Detection"
         and row["user_id"] == "42"
-        and row["Metric"] == "pattern_count"
-        and row["pattern_detected"] == "YN"
-        and row["pattern_value"] == "2"
+        and row["Metric"] == "pattern_YN"
+        and row["Value"] == "2"
         for row in rows
     )
 
