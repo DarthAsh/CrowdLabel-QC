@@ -4,7 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from qcc.cli.main import _build_summary
+import csv
+
+from qcc.cli.main import _build_summary, _write_summary_csv
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.data_ingestion.mysql_importer import DEFAULT_TAG_PROMPT_TABLES
 from qcc.io.db_adapter import DBAdapter
@@ -271,6 +273,103 @@ def test_summary_includes_speed_metrics():
     per_tagger = {entry["tagger_id"]: entry for entry in speed_metrics["per_tagger"]}
     assert per_tagger["42"]["mean_log2"] == pytest.approx(3.0)
     assert per_tagger["42"]["seconds_per_tag"] == pytest.approx(8.0)
+
+
+def test_summary_includes_pattern_metrics(tmp_path):
+    now = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assignments = [
+        TagAssignment(
+            tagger_id="42",
+            comment_id="comment-1",
+            characteristic_id="5",
+            value=TagValue.YES,
+            timestamp=now,
+        ),
+        TagAssignment(
+            tagger_id="42",
+            comment_id="comment-2",
+            characteristic_id="5",
+            value=TagValue.NO,
+            timestamp=now + timedelta(seconds=8),
+        ),
+        TagAssignment(
+            tagger_id="42",
+            comment_id="comment-3",
+            characteristic_id="5",
+            value=TagValue.YES,
+            timestamp=now + timedelta(seconds=16),
+        ),
+        TagAssignment(
+            tagger_id="42",
+            comment_id="comment-4",
+            characteristic_id="5",
+            value=TagValue.NO,
+            timestamp=now + timedelta(seconds=24),
+        ),
+        TagAssignment(
+            tagger_id="99",
+            comment_id="comment-5",
+            characteristic_id="7",
+            value=TagValue.NO,
+            timestamp=now + timedelta(seconds=32),
+        ),
+    ]
+
+    domain_objects = {
+        "assignments": assignments,
+        "comments": [],
+        "taggers": [
+            Tagger(id="42", meta=None, tagassignments=assignments[:4]),
+            Tagger(id="99", meta=None, tagassignments=[assignments[4]]),
+        ],
+        "characteristics": [],
+        "answers": [],
+        "prompt_deployments": [],
+        "prompts": [],
+        "questions": [],
+    }
+
+    summary = _build_summary(domain_objects)
+
+    pattern_summary = summary["pattern_detection"]
+    assert pattern_summary["strategy"] == "HorizontalPatternDetection"
+    assert pattern_summary["patterns_tracked"] == [
+        "Y",
+        "N",
+        "YN",
+        "YNY",
+        "YNN",
+        "YNNY",
+        "YYYN",
+        "YNNN",
+    ]
+    assert pattern_summary["taggers_with_patterns"] == 1
+    assert pattern_summary["aggregate_counts"] == {"YN": 2}
+
+    per_tagger = {entry["tagger_id"]: entry for entry in pattern_summary["per_tagger"]}
+    assert per_tagger["42"]["patterns"] == {"YN": 2}
+
+    csv_path = tmp_path / "summary.csv"
+    _write_summary_csv(summary, csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+
+    assert any(
+        row["Strategy"] == "Pattern Detection"
+        and row["user_id"] == "aggregate"
+        and row["Metric"] == "pattern_YN"
+        and row["Value"] == "2"
+        for row in rows
+    )
+
+    assert any(
+        row["Strategy"] == "Pattern Detection"
+        and row["user_id"] == "42"
+        and row["Metric"] == "pattern_YN"
+        and row["Value"] == "2"
+        for row in rows
+    )
 
 
 def test_db_adapter_handles_camel_cased_answer_identifiers():

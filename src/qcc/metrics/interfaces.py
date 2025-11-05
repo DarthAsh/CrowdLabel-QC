@@ -4,7 +4,7 @@ Protocols describe pure, deterministic, no-I/O strategy contracts. Use forward
 references for domain types to avoid circular imports.
 """
 from __future__ import annotations
-from typing import Protocol, Dict
+from typing import Dict, Iterable, Protocol
 import re
 
 from ..domain.enums import TagValue
@@ -60,7 +60,7 @@ class PatternSignalsStrategy(Protocol):
     def analyze(self, tagger: "Tagger") -> Dict[str, int]:  # pragma: no cover - interface
         ...
 
-    def build_sequence_str(self,  assignments: "list[TagAssignment]"):
+    def build_sequence_str(self, assignments: "list[TagAssignment]") -> str:
         """Function takes in a list of tag assignments, and then returns a sequence string consisting of the first character of the tag value
         for each tag assignment
 
@@ -72,17 +72,18 @@ class PatternSignalsStrategy(Protocol):
         Returns:
             str: sequence_str in the format "YNYN" etc.
         """
-        assignment_str = ""
+        tokens: list[str] = []
         for assignment in assignments:
-            if assignment.value == TagValue.YES:
-                assignment_str += "Y"
-            elif assignment.value == TagValue.NO:
-                assignment_str += "N"
-        
-        return assignment_str
+            value = getattr(assignment, "value", None)
+            if value == TagValue.YES:
+                tokens.append("Y")
+            elif value == TagValue.NO:
+                tokens.append("N")
+
+        return "".join(tokens)
     
     
-    def count_pattern_repetition(self, pattern: str, assignment_sequence: str):
+    def count_pattern_repetition(self, pattern: str, assignment_sequence: str) -> int:
         """Function counts number of occurences of input pattern in the input assignment_sequence string
 
         Args:
@@ -92,15 +93,19 @@ class PatternSignalsStrategy(Protocol):
         Returns:
             int: number of times input pattern was repeated in the input assignment_sequence string
         """
-        pattern_str = pattern.str
+        pattern_str = str(pattern)
+        if not pattern_str:
+            return 0
 
         # when pattern detected, jump to char that exists right after last letter in pattern
-        list_patterns_found = re.findall(pattern=pattern_str, string=assignment_sequence)
+        list_patterns_found = re.findall(pattern=re.escape(pattern_str), string=assignment_sequence)
         num_repeats = len(list_patterns_found)
 
         return num_repeats
 
-    def generate_pattern_frequency(self, tag_assignments) -> Dict[str, int]:
+    def generate_pattern_frequency(
+        self, tag_assignments: Iterable["TagAssignment"]
+    ) -> Dict[str, int]:
         """Function that creates a dictionary representing the number of times each pattern in PatternCollection is repeated
         in tag_assignments
 
@@ -115,7 +120,7 @@ class PatternSignalsStrategy(Protocol):
         all_patterns = PatternCollection.return_all_patterns()
 
         # Create count dictionary
-        count = {}
+        count: Dict[str, int] = {}
 
         # run loop to detect patterns
         for pattern in all_patterns:
