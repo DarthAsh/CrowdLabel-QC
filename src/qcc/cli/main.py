@@ -289,7 +289,7 @@ def _build_summary(domain_objects: Dict[str, object]) -> Dict[str, object]:
         positive_patterns = {
             pattern: count
             for pattern, count in (pattern_counts or {}).items()
-            if count > 1 and len(pattern) > 1
+            if count > 0
         }
         if positive_patterns:
             taggers_with_patterns += 1
