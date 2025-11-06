@@ -1,10 +1,12 @@
 """Tests for CLI summary output helpers."""
 
 import csv
+import logging
 
 from pathlib import Path
 
-from qcc.cli.main import write_summary
+from qcc.cli.main import setup_logging, write_summary
+from qcc.config.schema import LoggingConfig
 
 
 def _read_csv_rows(csv_path: Path):
@@ -93,3 +95,23 @@ def test_write_summary_handles_missing_speed_data(tmp_path):
     rows = _read_csv_rows(csv_path)
 
     assert rows == []
+
+
+def test_setup_logging_writes_to_configured_file(tmp_path):
+    output_dir = Path(tmp_path)
+    log_config = LoggingConfig(level="INFO", file="custom.log")
+
+    log_path = setup_logging(log_config, output_dir)
+
+    logging.getLogger("qcc.tests").info("sample message")
+
+    for handler in logging.getLogger().handlers:
+        flush = getattr(handler, "flush", None)
+        if callable(flush):
+            flush()
+
+    assert log_path == output_dir / "custom.log"
+    assert log_path.exists()
+
+    contents = log_path.read_text(encoding="utf-8")
+    assert "sample message" in contents

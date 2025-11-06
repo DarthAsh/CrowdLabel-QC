@@ -91,6 +91,7 @@ class TestCLISmoke:
             assert result.returncode == 0
             assert (output_dir / "summary.json").exists()
             assert (output_dir / "summary.csv").exists()
+            assert (output_dir / "qcc.log").exists()
     
     def test_cli_config_loading(self):
         """Test that CLI can load default configuration."""
@@ -145,4 +146,5 @@ class TestCLISmoke:
             assert result.returncode == 0
             assert (output_dir / "summary.json").exists()
             assert (output_dir / "summary.csv").exists()
+            assert (output_dir / "qcc.log").exists()
 

@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 import yaml
 
-from qcc.config.schema import InputConfig, QCCConfig
+from qcc.config.schema import InputConfig, LoggingConfig, QCCConfig
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.io.csv_adapter import CSVAdapter
 from qcc.io.db_adapter import DBAdapter
@@ -25,11 +26,17 @@ def main() -> int:
     """
     parser = create_argument_parser()
     args = parser.parse_args()
-    
+
+    if getattr(args, "command", None) != "run":
+        parser.print_help()
+        return 1
+
     try:
         # Load configuration
         config = load_config(args.config)
         config = _apply_run_overrides(config, args)
+
+        log_path = setup_logging(config.logging, args.output)
 
         # Run the analysis
         result = run_analysis(
@@ -37,13 +44,22 @@ def main() -> int:
             output_dir=args.output,
             config=config
         )
-        
+
+        result.setdefault("metadata", {})
+        if isinstance(result["metadata"], dict):
+            result["metadata"]["log_file"] = str(log_path)
+        else:  # pragma: no cover - defensive fallback
+            result["log_file"] = str(log_path)
+
         # Write summary
         write_summary(result, args.output)
-        
-        print(f"Analysis completed successfully. Results saved to {args.output}")
+
+        print(
+            "Analysis completed successfully. Results saved to"
+            f" {args.output} (logs: {log_path})"
+        )
         return 0
-        
+
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -210,6 +226,46 @@ def _apply_run_overrides(config: QCCConfig, args: argparse.Namespace) -> QCCConf
             mysql_settings.use_pure = bool(args.mysql_use_pure)
 
     return updated
+
+
+def setup_logging(logging_config: LoggingConfig, output_dir: Path) -> Path:
+    """Configure logging so messages are persisted to a file."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    log_file = logging_config.file
+    if log_file:
+        configured_path = Path(log_file)
+        log_path = (
+            configured_path
+            if configured_path.is_absolute()
+            else output_dir / configured_path
+        )
+    else:
+        log_path = output_dir / "qcc.log"
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        level_value = getattr(logging, logging_config.level.upper())
+        if not isinstance(level_value, int):  # pragma: no cover - defensive
+            raise AttributeError
+    except AttributeError:  # pragma: no cover - invalid level fallback
+        level_value = logging.INFO
+
+    handlers = [
+        logging.FileHandler(log_path, encoding="utf-8"),
+        logging.StreamHandler(),
+    ]
+
+    logging.basicConfig(
+        level=level_value,
+        format=logging_config.format,
+        handlers=handlers,
+        force=True,
+    )
+
+    return log_path
 
 
 def run_analysis(
