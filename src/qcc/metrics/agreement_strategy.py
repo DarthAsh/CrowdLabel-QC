@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Any, Optional, Iterable, Dict, Set, Tuple
-from collections import defaultdict
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set, Tuple
+from collections import Counter, defaultdict
+from itertools import combinations
 import datetime
 import math
 
@@ -65,41 +66,64 @@ class LatestLabelPercentAgreement:
                 
         return categories, unit_rater_matrix
 
-    # --- Pairwise Metric (Percent Agreement) ---
-    
-    def pairwise(self, tagger_a: Tagger, tagger_b: Tagger, char: Characteristic) -> float:
-        """
-        Calculates simple percent agreement between two taggers for a specific
-        characteristic, using their latest assignments on overlapping units.
-        """
-        # 1. Combine all assignments from both taggers
-        # Assumes Tagger object has a 'tagassignments' attribute
-        all_assignments = (tagger_a.tagassignments or []) + (tagger_b.tagassignments or [])
-        
-        # 2. Prepare the matrix to get latest, valid ratings for this characteristic
-        # The matrix is filtered to only include assignments by tagger_a and tagger_b
-        _, matrix = LatestLabelPercentAgreement._prepare_alpha_matrix(all_assignments, char.id)
-        
-        total_agreed = 0
-        total_compared = 0
+    # --- Aggregate metrics -------------------------------------------------
 
-        # 3. Iterate over units (comments) and calculate agreement
-        for comment_id, ratings in matrix.items():
-            # Get the latest rating for the current characteristic from each tagger
-            a_value = ratings.get(tagger_a.id)
-            b_value = ratings.get(tagger_b.id)
-            
-            # Check for overlap: both taggers must have a latest, non-NA rating for this unit
-            if a_value is not None and b_value is not None:
-                total_compared += 1
-                if a_value == b_value:
-                    total_agreed += 1  # Increment count if labels match
+    def percent_agreement(
+        self, assignments: Iterable[TagAssignment], characteristic: Characteristic
+    ) -> float:
+        """Return overall percent agreement for the latest labels."""
 
-        if total_compared == 0:
+        _, matrix = self._prepare_alpha_matrix(assignments, characteristic.id)
+        return self._pairwise_agreement_from_matrix(matrix)
+
+    def cohens_kappa(
+        self, assignments: Iterable[TagAssignment], characteristic: Characteristic
+    ) -> float:
+        """Average Cohen's kappa across all tagger pairs."""
+
+        _, matrix = self._prepare_alpha_matrix(assignments, characteristic.id)
+        tagger_ids = self._ordered_tagger_ids(matrix)
+        if len(tagger_ids) < 2:
             return 0.0
 
-        # Percent agreement = (Agreed Units) / (Compared Units)
-        return total_agreed / total_compared
+        kappas = [
+            self._cohens_kappa_for_pair(matrix, a_id, b_id)
+            for a_id, b_id in combinations(tagger_ids, 2)
+        ]
+        kappas = [score for score in kappas if score is not None]
+        if not kappas:
+            return 0.0
+        return float(sum(kappas) / len(kappas))
+
+    def agreement_matrix(
+        self, assignments: Iterable[TagAssignment], characteristic: Characteristic
+    ) -> Dict[str, Dict[str, float]]:
+        """Return a symmetric matrix of pairwise percent agreements."""
+
+        _, matrix = self._prepare_alpha_matrix(assignments, characteristic.id)
+        tagger_ids = self._ordered_tagger_ids(matrix)
+        if not tagger_ids:
+            return {}
+
+        agreement: Dict[str, Dict[str, float]] = {tid: {} for tid in tagger_ids}
+        for tid in tagger_ids:
+            agreement[tid][tid] = 1.0
+
+        for a_id, b_id in combinations(tagger_ids, 2):
+            score = self._pairwise_agreement_for_ids(matrix, a_id, b_id)
+            agreement[a_id][b_id] = score
+            agreement[b_id][a_id] = score
+
+        return agreement
+
+    # --- Pairwise Metric (Percent Agreement) ---
+
+    def pairwise(self, tagger_a: Tagger, tagger_b: Tagger, char: Characteristic) -> float:
+        """Calculate percent agreement between two taggers."""
+
+        all_assignments = (tagger_a.tagassignments or []) + (tagger_b.tagassignments or [])
+        _, matrix = self._prepare_alpha_matrix(all_assignments, char.id)
+        return self._pairwise_agreement_for_ids(matrix, tagger_a.id, tagger_b.id)
     
     # --- Overall Metric (Krippendorff's Alpha) ---
     
@@ -116,66 +140,157 @@ class LatestLabelPercentAgreement:
         Formula: alpha = 1 - (D_o / D_e)
         """
 
-        # 1. Prepare the clean Unit x Rater matrix and the set of categories
         categories, unit_rater_matrix = cls._prepare_alpha_matrix(all_assignments, char.id)
+        return cls._krippendorffs_alpha_from_matrix(categories, unit_rater_matrix)
 
-        # 2. Build category index
-        unique_categories = sorted(list(categories), key=lambda x: x.value)
-        category_to_index = {c: i for i, c in enumerate(unique_categories)}
-        C = len(unique_categories)
+    # --- Shared helpers ----------------------------------------------------
 
-        if len(unit_rater_matrix) == 0:
-            return None  # No valid data
+    @staticmethod
+    def _ordered_tagger_ids(
+        matrix: Mapping[str, Mapping[str, TagValue]]
+    ) -> Sequence[str]:
+        tagger_ids = {
+            tagger_id
+            for ratings in matrix.values()
+            for tagger_id in ratings
+        }
+        return sorted(tagger_ids)
 
-        # 3. Build coincidence matrix (symmetric)
-        coincidence_matrix = [[0] * C for _ in range(C)]
-        N = 0.0  # Total number of unordered pairs
+    @staticmethod
+    def _pairwise_agreement_from_matrix(
+        matrix: Mapping[str, Mapping[str, TagValue]]
+    ) -> float:
+        total_pairs = 0
+        agreeing_pairs = 0
 
-        for ratings in unit_rater_matrix.values():
-            valid_ratings = list(ratings.values())
-            m_u = len(valid_ratings)
-            if m_u < 2:
+        for ratings in matrix.values():
+            values = list(ratings.values())
+            if len(values) < 2:
                 continue
+            for idx in range(len(values)):
+                for jdx in range(idx + 1, len(values)):
+                    total_pairs += 1
+                    if values[idx] == values[jdx]:
+                        agreeing_pairs += 1
 
-            # FIX: use unordered pairs, not ordered
-            n_u = m_u * (m_u - 1) / 2
-            N += n_u
+        if total_pairs == 0:
+            return 0.0
+        return agreeing_pairs / total_pairs
 
-            for i in range(m_u):
-                for j in range(i + 1, m_u):
-                    idx1 = category_to_index[valid_ratings[i]]
-                    idx2 = category_to_index[valid_ratings[j]]
-                    coincidence_matrix[idx1][idx2] += 1
-                    coincidence_matrix[idx2][idx1] += 1
+    @staticmethod
+    def _pairwise_agreement_for_ids(
+        matrix: Mapping[str, Mapping[str, TagValue]],
+        tagger_a: str,
+        tagger_b: str,
+    ) -> float:
+        total = 0
+        agree = 0
+        for ratings in matrix.values():
+            a_value = ratings.get(tagger_a)
+            b_value = ratings.get(tagger_b)
+            if a_value is None or b_value is None:
+                continue
+            total += 1
+            if a_value == b_value:
+                agree += 1
+        if total == 0:
+            return 0.0
+        return agree / total
 
-        if N == 0:
+    @staticmethod
+    def _cohens_kappa_for_pair(
+        matrix: Mapping[str, Mapping[str, TagValue]],
+        tagger_a: str,
+        tagger_b: str,
+    ) -> Optional[float]:
+        pairs = []
+        for ratings in matrix.values():
+            a_value = ratings.get(tagger_a)
+            b_value = ratings.get(tagger_b)
+            if a_value is None or b_value is None:
+                continue
+            pairs.append((a_value, b_value))
+
+        if not pairs:
             return None
 
-        # 4. Category counts (marginal frequencies)
-        category_counts = defaultdict(int)
+        total = len(pairs)
+        observed_agreements = sum(1 for a_value, b_value in pairs if a_value == b_value)
+        p_o = observed_agreements / total
+
+        counts_a: Counter[TagValue] = Counter()
+        counts_b: Counter[TagValue] = Counter()
+        for a_value, b_value in pairs:
+            counts_a[a_value] += 1
+            counts_b[b_value] += 1
+
+        p_e = 0.0
+        for value in set(counts_a.keys()) | set(counts_b.keys()):
+            p_e += (counts_a[value] / total) * (counts_b[value] / total)
+
+        denominator = 1.0 - p_e
+        if denominator == 0.0:
+            return 1.0 if p_o == 1.0 else 0.0
+        return (p_o - p_e) / denominator
+
+    @classmethod
+    def _krippendorffs_alpha_from_matrix(
+        cls,
+        categories: Set[TagValue],
+        unit_rater_matrix: Mapping[str, Mapping[str, TagValue]],
+    ) -> Optional[float]:
+        if not unit_rater_matrix:
+            return None
+
+        ordered_categories = sorted(categories, key=lambda value: value.value)
+        if not ordered_categories:
+            return None
+
+        category_to_index = {value: idx for idx, value in enumerate(ordered_categories)}
+        category_count = len(ordered_categories)
+
+        coincidence_matrix = [[0] * category_count for _ in range(category_count)]
+        total_pairs = 0.0
+
+        for ratings in unit_rater_matrix.values():
+            values = list(ratings.values())
+            if len(values) < 2:
+                continue
+            total_pairs += len(values) * (len(values) - 1) / 2
+            for idx in range(len(values)):
+                for jdx in range(idx + 1, len(values)):
+                    a_idx = category_to_index[values[idx]]
+                    b_idx = category_to_index[values[jdx]]
+                    coincidence_matrix[a_idx][b_idx] += 1
+                    coincidence_matrix[b_idx][a_idx] += 1
+
+        if total_pairs == 0:
+            return None
+
+        category_totals: Counter[TagValue] = Counter()
         for ratings in unit_rater_matrix.values():
             for value in ratings.values():
-                category_counts[value] += 1
+                category_totals[value] += 1
 
-        n_c_totals = [category_counts.get(cat, 0) for cat in unique_categories]
+        observed_disagreement = sum(
+            coincidence_matrix[i][j]
+            for i in range(category_count)
+            for j in range(category_count)
+            if i != j
+        )
+        observed_disagreement /= total_pairs
 
-        # 5. Observed and expected disagreement
-        D_o_raw = sum(coincidence_matrix[i][j] for i in range(C) for j in range(C) if i != j)
-        D_o_normalized = D_o_raw / N
+        sum_of_squares = sum(count ** 2 for count in category_totals.values())
+        expected_disagreement = 0.0
+        if total_pairs > 1:
+            expected_disagreement = (total_pairs * total_pairs - sum_of_squares) / (
+                total_pairs * (total_pairs - 1)
+            )
 
-        sum_of_squares_nc = sum(n_c ** 2 for n_c in n_c_totals)
+        if expected_disagreement == 0.0:
+            return 1.0 if observed_disagreement == 0.0 else 0.0
 
-        D_e_normalized = 0.0
-        if N > 1:
-            D_e_normalized = (N * N - sum_of_squares_nc) / (N * (N - 1))
-
-        # 6. Compute alpha
-        if D_e_normalized == 0.0:
-            return 1.0 if D_o_normalized == 0.0 else 0.0
-
-        alpha = 1 - (D_o_normalized / D_e_normalized)
-
-        # Clamp result for stability
+        alpha = 1 - (observed_disagreement / expected_disagreement)
         alpha = max(-1.0, min(1.0, alpha))
-        alpha = max(0.0, alpha)  # For standard reporting
+        alpha = max(0.0, alpha)
         return round(alpha, 3)

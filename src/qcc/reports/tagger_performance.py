@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import math
 from pathlib import Path
-from typing import Dict, List, Mapping, Sequence, Tuple
+from typing import Dict, List, Mapping, Sequence, Tuple, Optional
 
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.tagassignment import TagAssignment
@@ -13,6 +13,7 @@ from qcc.domain.tagger import Tagger
 from qcc.metrics.pattern_strategy import HorizontalPatternDetection
 from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
 from qcc.metrics.utils.pattern import PatternCollection
+from qcc.metrics.agreement import AgreementMetrics
 
 
 class TaggerPerformanceReport:
@@ -31,18 +32,33 @@ class TaggerPerformanceReport:
         include_speed: bool = True,
         include_patterns: bool = True,
         include_agreement: bool = False,
+        agreement_methods: Optional[Sequence[str]] = None,
     ) -> Dict[str, object]:
         """Generate a summary performance report for taggers.
 
-        Currently speed and pattern metrics are supported. Agreement metrics are
-        not yet implemented and attempting to include them raises an error so we
-        do not silently omit requested data.
+        Speed, pattern, and agreement metrics are supported. Agreement analysis
+        delegates to :class:`qcc.metrics.agreement.AgreementMetrics` and
+        inherits its latest-label semantics.
+
+        Args:
+            taggers: Taggers to summarize.
+            characteristics: Characteristics to analyze for agreement.
+            include_speed: Include tagging speed metrics in the response.
+            include_patterns: Include pattern detection metrics in the response.
+            include_agreement: Include agreement analysis in the response.
+            agreement_methods: Optional ordered list of method identifiers to
+                compute when agreement metrics are requested. Unrecognized
+                methods are ignored.
         """
 
-        if include_agreement:
-            raise NotImplementedError("Agreement metrics have not been implemented")
-
         summary: Dict[str, object] = {}
+
+        if include_agreement:
+            summary["agreement"] = self._generate_agreement_summary(
+                characteristics,
+                agreement_methods
+                or ("percent_agreement", "cohens_kappa", "krippendorffs_alpha"),
+            )
 
         if include_speed:
             summary["tagger_speed"] = self._generate_speed_summary(taggers)
@@ -127,6 +143,55 @@ class TaggerPerformanceReport:
             "strategy": "HorizontalPatternDetection",
             "patterns_tracked": tracked_patterns,
             "per_tagger": per_tagger_patterns,
+        }
+
+    def _generate_agreement_summary(
+        self,
+        characteristics: Sequence[Characteristic],
+        methods: Sequence[str],
+    ) -> Dict[str, object]:
+        metrics = AgreementMetrics()
+        per_characteristic: List[Dict[str, object]] = []
+
+        for characteristic in characteristics:
+            relevant_assignments = [
+                assignment
+                for assignment in self.assignments
+                if assignment.characteristic_id == characteristic.id
+            ]
+
+            if not relevant_assignments:
+                continue
+
+            char_entry: Dict[str, object] = {
+                "characteristic_id": str(characteristic.id),
+                "characteristic_name": getattr(characteristic, "name", str(characteristic.id)),
+            }
+
+            for method in methods:
+                if method == "percent_agreement":
+                    char_entry[method] = metrics.percent_agreement(
+                        relevant_assignments, characteristic
+                    )
+                elif method == "cohens_kappa":
+                    char_entry[method] = metrics.cohens_kappa(
+                        relevant_assignments, characteristic
+                    )
+                elif method == "krippendorffs_alpha":
+                    char_entry[method] = metrics.krippendorffs_alpha(
+                        relevant_assignments, characteristic
+                    )
+                elif method == "agreement_matrix":
+                    char_entry[method] = metrics.agreement_matrix(
+                        relevant_assignments, characteristic
+                    )
+
+            per_characteristic.append(char_entry)
+
+        return {
+            "strategy": metrics.strategy.__class__.__name__,
+            "methods": list(methods),
+            "per_characteristic": per_characteristic,
         }
 
     def _build_csv_rows(

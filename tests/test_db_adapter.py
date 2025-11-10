@@ -10,6 +10,7 @@ from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.data_ingestion.mysql_importer import DEFAULT_TAG_PROMPT_TABLES
 from qcc.io.db_adapter import DBAdapter
 from qcc.domain.enums import TagValue
+from qcc.domain.characteristic import Characteristic
 from qcc.domain.comment import Comment
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
@@ -427,3 +428,60 @@ def test_db_adapter_logs_invalid_rows(caplog):
     messages = [record.getMessage() for record in caplog.records]
     assert any("user_id=trouble-user" in message for message in messages)
 
+
+def test_tagger_performance_report_includes_agreement_summary():
+    base_time = datetime(2024, 1, 1, 12, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="1",
+            comment_id="c1",
+            characteristic_id="char",
+            value=TagValue.YES,
+            timestamp=base_time,
+        ),
+        TagAssignment(
+            tagger_id="2",
+            comment_id="c1",
+            characteristic_id="char",
+            value=TagValue.YES,
+            timestamp=base_time + timedelta(minutes=1),
+        ),
+        TagAssignment(
+            tagger_id="1",
+            comment_id="c2",
+            characteristic_id="char",
+            value=TagValue.NO,
+            timestamp=base_time + timedelta(minutes=2),
+        ),
+        TagAssignment(
+            tagger_id="2",
+            comment_id="c2",
+            characteristic_id="char",
+            value=TagValue.NO,
+            timestamp=base_time + timedelta(minutes=3),
+        ),
+    ]
+
+    taggers = [
+        Tagger(id="1", meta=None, tagassignments=[assignments[0], assignments[2]]),
+        Tagger(id="2", meta=None, tagassignments=[assignments[1], assignments[3]]),
+    ]
+    characteristics = [Characteristic("char", "Spam?")]
+
+    report = TaggerPerformanceReport(assignments)
+    summary = report.generate_summary_report(
+        taggers,
+        characteristics,
+        include_agreement=True,
+    )
+
+    agreement = summary.get("agreement")
+    assert agreement["strategy"] == "LatestLabelPercentAgreement"
+    per_characteristic = agreement["per_characteristic"]
+    assert len(per_characteristic) == 1
+
+    char_entry = per_characteristic[0]
+    assert char_entry["characteristic_id"] == "char"
+    assert char_entry["percent_agreement"] == pytest.approx(1.0)
+    assert char_entry["cohens_kappa"] == pytest.approx(1.0)
+    assert char_entry["krippendorffs_alpha"] == 1.0
