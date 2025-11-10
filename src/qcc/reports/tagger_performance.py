@@ -186,6 +186,15 @@ class TaggerPerformanceReport:
                         relevant_assignments, characteristic
                     )
 
+            per_tagger_metrics = metrics.per_tagger_metrics(
+                relevant_assignments, characteristic, methods
+            )
+            if per_tagger_metrics:
+                char_entry["per_tagger"] = [
+                    {"tagger_id": tagger_id, **per_tagger_metrics[tagger_id]}
+                    for tagger_id in sorted(per_tagger_metrics)
+                ]
+
             per_characteristic.append(char_entry)
 
         return {

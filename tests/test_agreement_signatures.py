@@ -82,6 +82,20 @@ class TestAgreementMetrics:
         matrix = self.metrics.agreement_matrix(self.assignments, self.char)
         assert matrix == {"tagger1": {"tagger1": 1.0, "tagger2": 1.0}, "tagger2": {"tagger1": 1.0, "tagger2": 1.0}}
 
+    def test_per_tagger_metrics(self) -> None:
+        """Per-tagger metrics mirror the requested agreement methods."""
+
+        per_tagger = self.metrics.per_tagger_metrics(
+            self.assignments,
+            self.char,
+            ("percent_agreement", "cohens_kappa"),
+        )
+
+        assert per_tagger == {
+            "tagger1": {"percent_agreement": 1.0, "cohens_kappa": 1.0},
+            "tagger2": {"percent_agreement": 1.0, "cohens_kappa": 1.0},
+        }
+
     def test_filter_assignments(self) -> None:
         """Filtering retains only assignments for the requested characteristic."""
 

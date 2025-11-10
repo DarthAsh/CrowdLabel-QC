@@ -116,6 +116,70 @@ class LatestLabelPercentAgreement:
 
         return agreement
 
+    def per_tagger_metrics(
+        self,
+        assignments: Iterable[TagAssignment],
+        characteristic: Characteristic,
+        methods: Sequence[str],
+    ) -> Dict[str, Dict[str, float]]:
+        """Return requested agreement metrics averaged per tagger."""
+
+        _, matrix = self._prepare_alpha_matrix(assignments, characteristic.id)
+        tagger_ids = self._ordered_tagger_ids(matrix)
+        if not tagger_ids:
+            return {}
+
+        requested_methods = set(methods)
+        compute_percent = "percent_agreement" in requested_methods
+        compute_kappa = "cohens_kappa" in requested_methods
+
+        percent_cache: Dict[Tuple[str, str], float] = {}
+        kappa_cache: Dict[Tuple[str, str], Optional[float]] = {}
+
+        if compute_percent or compute_kappa:
+            for a_id, b_id in combinations(tagger_ids, 2):
+                if compute_percent:
+                    score = self._pairwise_agreement_for_ids(matrix, a_id, b_id)
+                    percent_cache[(a_id, b_id)] = score
+                    percent_cache[(b_id, a_id)] = score
+                if compute_kappa:
+                    score = self._cohens_kappa_for_pair(matrix, a_id, b_id)
+                    kappa_cache[(a_id, b_id)] = score
+                    kappa_cache[(b_id, a_id)] = score
+
+        per_tagger: Dict[str, Dict[str, float]] = {}
+        for tagger_id in tagger_ids:
+            peers = [other for other in tagger_ids if other != tagger_id]
+            tagger_entry: Dict[str, float] = {}
+
+            if compute_percent:
+                peer_scores = [
+                    percent_cache.get((tagger_id, other))
+                    for other in peers
+                    if (tagger_id, other) in percent_cache
+                ]
+                if peer_scores:
+                    tagger_entry["percent_agreement"] = sum(peer_scores) / len(peer_scores)
+                else:
+                    tagger_entry["percent_agreement"] = 0.0
+
+            if compute_kappa:
+                peer_scores = [
+                    kappa_cache.get((tagger_id, other))
+                    for other in peers
+                    if (tagger_id, other) in kappa_cache
+                ]
+                cleaned_scores = [score for score in peer_scores if score is not None]
+                if cleaned_scores:
+                    tagger_entry["cohens_kappa"] = sum(cleaned_scores) / len(cleaned_scores)
+                else:
+                    tagger_entry["cohens_kappa"] = 0.0
+
+            if tagger_entry:
+                per_tagger[tagger_id] = tagger_entry
+
+        return per_tagger
+
     # --- Pairwise Metric (Percent Agreement) ---
 
     def pairwise(self, tagger_a: Tagger, tagger_b: Tagger, char: Characteristic) -> float:

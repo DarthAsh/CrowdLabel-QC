@@ -61,6 +61,16 @@ class AgreementMetrics:
 
         return self._strategy.agreement_matrix(assignments, characteristic)
 
+    def per_tagger_metrics(
+        self,
+        assignments: Iterable[TagAssignment],
+        characteristic: Characteristic,
+        methods: Sequence[str],
+    ) -> dict[str, dict[str, float]]:
+        """Return agreement metrics averaged per tagger for the requested methods."""
+
+        return self._strategy.per_tagger_metrics(assignments, characteristic, methods)
+
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------

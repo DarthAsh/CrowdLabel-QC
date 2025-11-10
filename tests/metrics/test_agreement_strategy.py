@@ -80,6 +80,28 @@ class TestLatestLabelPercentAgreement:
         matrix = self.strategy.agreement_matrix(assignments, self.char)
         assert matrix == {"a": {"a": 1.0, "b": 1.0}, "b": {"a": 1.0, "b": 1.0}}
 
+    def test_per_tagger_metrics_average_pairwise_scores(self) -> None:
+        assignments = [
+            _assignment("a", "c1", 0, TagValue.YES),
+            _assignment("b", "c1", 1, TagValue.YES),
+            _assignment("c", "c1", 2, TagValue.NO),
+            _assignment("a", "c2", 3, TagValue.NO),
+            _assignment("b", "c2", 4, TagValue.NO),
+            _assignment("c", "c2", 5, TagValue.NO),
+        ]
+
+        per_tagger = self.strategy.per_tagger_metrics(
+            assignments,
+            self.char,
+            ("percent_agreement", "cohens_kappa"),
+        )
+
+        assert per_tagger == {
+            "a": {"percent_agreement": pytest.approx(0.75), "cohens_kappa": pytest.approx(0.5)},
+            "b": {"percent_agreement": pytest.approx(0.75), "cohens_kappa": pytest.approx(0.5)},
+            "c": {"percent_agreement": pytest.approx(0.5), "cohens_kappa": pytest.approx(0.0)},
+        }
+
     def test_krippendorff_alpha_reuses_matrix(self) -> None:
         assignments = [
             _assignment("a", "c1", 0, TagValue.YES),

@@ -485,3 +485,8 @@ def test_tagger_performance_report_includes_agreement_summary():
     assert char_entry["percent_agreement"] == pytest.approx(1.0)
     assert char_entry["cohens_kappa"] == pytest.approx(1.0)
     assert char_entry["krippendorffs_alpha"] == 1.0
+    per_tagger = {entry["tagger_id"]: entry for entry in char_entry["per_tagger"]}
+    assert per_tagger["1"]["percent_agreement"] == pytest.approx(1.0)
+    assert per_tagger["1"]["cohens_kappa"] == pytest.approx(1.0)
+    assert per_tagger["2"]["percent_agreement"] == pytest.approx(1.0)
+    assert per_tagger["2"]["cohens_kappa"] == pytest.approx(1.0)
