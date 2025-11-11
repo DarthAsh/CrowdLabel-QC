@@ -3,7 +3,9 @@
 Protocols describe pure, deterministic, no-I/O strategy contracts. Use forward
 references for domain types to avoid circular imports.
 """
+from itertools import product
 from __future__ import annotations
+from collections import defaultdict
 from typing import Dict, Iterable, Protocol
 import re
 
@@ -102,7 +104,11 @@ class PatternSignalsStrategy(Protocol):
         num_repeats = len(list_patterns_found)
 
         return num_repeats
-
+    
+    def canonical_rotation(self, pattern):
+        rotations = [pattern[i:] + pattern[:i] for i in range(len(pattern))]
+        return min(rotations)
+    
     def generate_pattern_frequency(
         self, tag_assignments: Iterable["TagAssignment"]
     ) -> Dict[str, int]:
@@ -117,14 +123,70 @@ class PatternSignalsStrategy(Protocol):
         """
         assignment_sequence = self.build_sequence_str(tag_assignments)
 
-        all_patterns = PatternCollection.return_all_patterns()
+        atomic_patterns = ["Y", "N"]
+        
 
-        # Create count dictionary
-        count: Dict[str, int] = {}
+        patterns = {1: atomic_patterns}
 
-        # run loop to detect patterns
-        for pattern in all_patterns:
-            repeat_count = self.count_pattern_repetition(pattern, assignment_sequence)
-            count[pattern] = repeat_count
+        # repeated cartesian product to create exhaustive list of patterns
+        for pattern_length in range(2, 5):
+            cur_patterns = []
+            
+            for bits in product('YN', repeat = pattern_length):
+                cur_pattern_str = ''.join(bits)
+                cur_patterns.append(cur_pattern_str)
 
-        return count
+            patterns[pattern_length] = cur_patterns
+
+        patterns_to_remove = {}
+        # Discard larger patterns (of length 4 and 3), that have at least one smaller pattern (length 3 or length 2) as a building block. Patterns of length 1 will be ignored, since these are atomic, so they will always be building blocks.
+        for key in sorted(patterns.keys(), reverse=True):
+            if key > 2:
+                cur_patterns = patterns[key]
+                smaller_patterns = []
+                patterns_to_discard = []
+
+                for i in range(2, key):
+                    smaller_patterns.extend(patterns[i])
+                
+                for pattern in cur_patterns:
+                    if any(small_pattern in pattern for small_pattern in smaller_patterns):
+                        patterns_to_discard.append(pattern)
+                patterns_to_remove[key] = patterns_to_discard
+            else:
+                break
+
+        for key, to_delete in patterns_to_remove.items():
+            patterns[key] = [p for p in patterns[key] if p not in to_delete]
+
+        
+        pattern_frequency = {}
+
+        # For each remaining pattern, count repetition within tag assignment sequence.
+        for key, pattern_list in patterns.items():
+            patterns_count = {}
+            for pattern in pattern_list:
+                patterns_count[pattern] = self.count_pattern_repetition(pattern, assignment_sequence)
+            pattern_frequency[key] = patterns_count
+
+        rot_groups = defaultdict(list)
+        # Next, identify patterns that are rotations of each other, and group those together - we will call these rotation groups. 
+        for patterns_count in pattern_frequency.values():
+            for pattern in patterns_count:
+                canon = self.canonical_rotation(pattern)
+                rot_groups[canon].append(pattern)
+
+        max_pattern_counts = {}
+        all_pattern_counts = {}
+        for counts in pattern_frequency.values():
+            all_pattern_counts.update(counts)
+
+        for canon, patterns in rot_groups.items():        
+            max_pattern = max(patterns, key=lambda p: all_pattern_counts[p])
+            max_count = all_pattern_counts[max_pattern]
+            max_pattern_counts[max_pattern] = max_count
+
+        # For each rotation group, find pattern with max  occurrences, and create a key-value pair => {"patternWithMaxOccurrence": # of occurrences}. Append this key-value pair to pattern_frequency map.
+        return max_pattern_counts
+        # Output pattern_frequency map
+        
