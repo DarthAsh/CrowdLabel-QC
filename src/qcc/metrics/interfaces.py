@@ -84,7 +84,7 @@ class PatternSignalsStrategy(Protocol):
 
         return "".join(tokens)
     
-    
+    # Non-overlapping patterns are found
     def count_pattern_repetition(self, pattern: str, assignment_sequence: str) -> int:
         """Function counts number of occurences of input pattern in the input assignment_sequence string
 
