@@ -183,6 +183,7 @@ class PatternSignalsStrategy(Protocol):
 
         for canon, patterns in rot_groups.items():        
             max_pattern = max(patterns, key=lambda p: all_pattern_counts[p])
+            # TODO - what if there are multiple max patterns? Need to handle that
             max_count = all_pattern_counts[max_pattern]
             max_pattern_counts[max_pattern] = max_count
 
