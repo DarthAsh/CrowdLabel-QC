@@ -263,6 +263,37 @@ class TaggerPerformanceReport:
                         tagger_row[column] = self._stringify_csv_value(count)
                         all_columns.add(column)
 
+        agreement_summary = summary.get("agreement", {}) if summary else {}
+        if isinstance(agreement_summary, Mapping) and agreement_summary:
+            per_characteristic = agreement_summary.get("per_characteristic", []) or []
+            per_tagger_values: Dict[str, Dict[str, List[float]]] = {}
+
+            for characteristic_entry in per_characteristic:
+                if not isinstance(characteristic_entry, Mapping):
+                    continue
+                per_tagger = characteristic_entry.get("per_tagger", []) or []
+                for tagger_entry in per_tagger:
+                    if not isinstance(tagger_entry, Mapping):
+                        continue
+                    tagger_id = str(tagger_entry.get("tagger_id", "")).strip()
+                    if not tagger_id:
+                        continue
+                    for metric_name, metric_value in tagger_entry.items():
+                        if metric_name == "tagger_id":
+                            continue
+                        if isinstance(metric_value, (int, float)) and math.isfinite(float(metric_value)):
+                            per_tagger_values.setdefault(tagger_id, {}).setdefault(metric_name, []).append(float(metric_value))
+
+            for tagger_id, metrics in per_tagger_values.items():
+                tagger_row = _row_for(tagger_id)
+                for metric_name, values in metrics.items():
+                    if not values:
+                        continue
+                    average_value = sum(values) / len(values)
+                    column = f"agreement_{metric_name}"
+                    tagger_row[column] = self._stringify_csv_value(average_value)
+                    all_columns.add(column)
+
         ordered_rows: List[Dict[str, str]] = []
         for user_id in sorted(rows):
             ordered_rows.append(rows[user_id])
@@ -290,6 +321,12 @@ class TaggerPerformanceReport:
             column for column in all_columns if column.startswith("pattern_count_")
         )
         for column in pattern_columns:
+            _add_field(column)
+
+        agreement_columns = sorted(
+            column for column in all_columns if column.startswith("agreement_")
+        )
+        for column in agreement_columns:
             _add_field(column)
 
         remaining = sorted(all_columns - set(fieldnames))

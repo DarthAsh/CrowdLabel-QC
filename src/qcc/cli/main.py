@@ -294,7 +294,11 @@ def run_analysis(
     characteristics = list(domain_objects.get("characteristics", []) or [])
 
     report = TaggerPerformanceReport(assignments)
-    summary = report.generate_summary_report(taggers, characteristics)
+    summary = report.generate_summary_report(
+        taggers,
+        characteristics,
+        include_agreement=True,
+    )
 
     report.export_to_csv(summary, output_dir / "summary.csv")
 
