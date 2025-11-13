@@ -15,14 +15,15 @@ class TaggingSpeedStrategy(Protocol):
     Inputs:
         tagger: "Tagger" (forward ref) containing tagassignments
     Outputs:
-        float: estimated mean of log2(seconds) between tags
+        float: estimated mean seconds between tags
+               (after trimming the slowest intervals)
 
     Invariants:
         - Pure: no mutation, no I/O
         - Deterministic for same input
     """
 
-    def speed_log2(self, tagger: "Tagger") -> float:  # pragma: no cover - interface
+    def speed_seconds(self, tagger: "Tagger") -> float:  # pragma: no cover - interface
         ...
 
 
