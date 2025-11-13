@@ -141,12 +141,12 @@ class PatternSignalsStrategy(Protocol):
         patterns_to_remove = {}
 
         # # Discard larger patterns (of length 4 and 3), that have at least one smaller pattern (length 3 or length 2) as a building block. Patterns of length 1 will be ignored, since these are atomic, so they will always be building blocks.
-        large_patterns = patterns.get(4, [])
-        small_patterns = patterns.get(2, [])
-        for pattern in large_patterns:
-            # check if made of 2 identical patterns
-            first_half = pattern[:2]
-            second_half = pattern[2:]
+        # large_patterns = patterns.get(4, [])
+        # small_patterns = patterns.get(2, [])
+        # for pattern in large_patterns:
+        #     # check if made of 2 identical patterns
+        #     first_half = pattern[:2]
+        #     second_half = pattern[2:]
 
         # for key in sorted(patterns.keys(), reverse=True):
         #     if key > 2:
