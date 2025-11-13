@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 """TagAssignment domain model for crowd labeling quality control."""
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
-from qcc.domain.enums import TagValue
-from qcc.domain.tagger import Tagger
-from qcc.domain.characteristic import Characteristic
-from qcc.domain.comment import Comment
+if TYPE_CHECKING:
+        from qcc.domain.enums import TagValue
+        from qcc.domain.tagger import Tagger
+        from qcc.domain.characteristic import Characteristic
+        from qcc.domain.comment import Comment
 
 @dataclass(frozen=True)
 class TagAssignment:
