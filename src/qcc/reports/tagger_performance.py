@@ -5,12 +5,16 @@ from __future__ import annotations
 import csv
 import math
 from pathlib import Path
+from collections import Counter
 from typing import Dict, List, Mapping, Sequence, Tuple, Optional
 
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
-from qcc.metrics.pattern_strategy import HorizontalPatternDetection
+from qcc.metrics.pattern_strategy import (
+    HorizontalPatternDetection,
+    VerticalPatternDetection,
+)
 from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
 from qcc.metrics.utils.pattern import PatternCollection
 from qcc.metrics.agreement import AgreementMetrics
@@ -64,7 +68,9 @@ class TaggerPerformanceReport:
             summary["tagger_speed"] = self._generate_speed_summary(taggers)
 
         if include_patterns:
-            summary["pattern_detection"] = self._generate_pattern_summary(taggers)
+            summary["pattern_detection"] = self._generate_pattern_summary(
+                taggers, characteristics
+            )
 
         return summary
 
@@ -116,33 +122,63 @@ class TaggerPerformanceReport:
             "per_tagger": per_tagger_speed,
         }
 
-    def _generate_pattern_summary(self, taggers: Sequence[Tagger]) -> Dict[str, object]:
-        pattern_strategy = HorizontalPatternDetection()
+    def _generate_pattern_summary(
+        self,
+        taggers: Sequence[Tagger],
+        characteristics: Sequence[Characteristic],
+    ) -> Dict[str, object]:
+        horizontal_strategy = HorizontalPatternDetection()
+        vertical_strategy = VerticalPatternDetection()
         tracked_patterns = PatternCollection.return_all_patterns()
-        per_tagger_patterns: List[Dict[str, object]] = []
+        horizontal_patterns: List[Dict[str, object]] = []
+        vertical_patterns: List[Dict[str, object]] = []
 
         for tagger in taggers:
-            pattern_counts = pattern_strategy.analyze(tagger)
+            pattern_counts = horizontal_strategy.analyze(tagger)
             positive_patterns = {
                 pattern: count
                 for pattern, count in (pattern_counts or {}).items()
                 if count > 1 and len(pattern) > 1
             }
 
-            if not positive_patterns:
-                continue
-
-            per_tagger_patterns.append(
-                {
+            if positive_patterns:
+                horizontal_entry = {
                     "tagger_id": str(tagger.id),
                     "patterns": dict(sorted(positive_patterns.items())),
                 }
-            )
+                horizontal_patterns.append(horizontal_entry)
+
+            if characteristics:
+                aggregate_counts: Counter[str] = Counter()
+                for characteristic in characteristics:
+                    char_counts = vertical_strategy.analyze(tagger, characteristic)
+                    if char_counts:
+                        aggregate_counts.update(char_counts)
+                vertical_positive = {
+                    pattern: count
+                    for pattern, count in aggregate_counts.items()
+                    if count > 1 and len(pattern) > 1
+                }
+                if vertical_positive:
+                    vertical_patterns.append(
+                        {
+                            "tagger_id": str(tagger.id),
+                            "patterns": dict(sorted(vertical_positive.items())),
+                        }
+                    )
 
         return {
             "strategy": "HorizontalPatternDetection",
             "patterns_tracked": tracked_patterns,
-            "per_tagger": per_tagger_patterns,
+            "per_tagger": horizontal_patterns,
+            "horizontal": {
+                "strategy": "HorizontalPatternDetection",
+                "per_tagger": horizontal_patterns,
+            },
+            "vertical": {
+                "strategy": "VerticalPatternDetection",
+                "per_tagger": vertical_patterns,
+            },
         }
 
     def _generate_agreement_summary(
@@ -244,24 +280,49 @@ class TaggerPerformanceReport:
 
         pattern_summary = summary.get("pattern_detection", {}) if summary else {}
         if isinstance(pattern_summary, Mapping) and pattern_summary:
-            strategy = pattern_summary.get("strategy")
-            per_tagger = pattern_summary.get("per_tagger", []) or []
-            for entry in per_tagger:
-                if not isinstance(entry, Mapping):
-                    continue
-                tagger_id = str(entry.get("tagger_id", "")).strip()
-                if not tagger_id:
-                    continue
-                tagger_row = _row_for(tagger_id)
-                if strategy:
-                    tagger_row["pattern_strategy"] = str(strategy)
-                    all_columns.add("pattern_strategy")
-                patterns = entry.get("patterns") or {}
-                if isinstance(patterns, Mapping):
-                    for pattern, count in patterns.items():
-                        column = f"pattern_count_{pattern}"
-                        tagger_row[column] = self._stringify_csv_value(count)
-                        all_columns.add(column)
+            pattern_entries: List[Tuple[str, Mapping[str, object]]] = []
+
+            for label in ("horizontal", "vertical"):
+                entry = pattern_summary.get(label)
+                if isinstance(entry, Mapping):
+                    pattern_entries.append((label, entry))
+
+            if not pattern_entries and (
+                "strategy" in pattern_summary or "per_tagger" in pattern_summary
+            ):
+                pattern_entries.append(("horizontal", pattern_summary))
+
+            for label, entry in pattern_entries:
+                strategy = entry.get("strategy")
+                per_tagger = entry.get("per_tagger", []) or []
+                for tagger_entry in per_tagger:
+                    if not isinstance(tagger_entry, Mapping):
+                        continue
+                    tagger_id = str(tagger_entry.get("tagger_id", "")).strip()
+                    if not tagger_id:
+                        continue
+                    tagger_row = _row_for(tagger_id)
+                    column_prefix = "pattern"
+                    if label not in ("", "horizontal"):
+                        column_prefix = f"pattern_{label}"
+                    strategy_column = (
+                        "pattern_strategy"
+                        if column_prefix == "pattern"
+                        else f"{column_prefix}_strategy"
+                    )
+                    if strategy:
+                        tagger_row[strategy_column] = str(strategy)
+                        all_columns.add(strategy_column)
+                    patterns = tagger_entry.get("patterns") or {}
+                    if isinstance(patterns, Mapping):
+                        for pattern, count in patterns.items():
+                            count_column = (
+                                f"pattern_count_{pattern}"
+                                if column_prefix == "pattern"
+                                else f"{column_prefix}_count_{pattern}"
+                            )
+                            tagger_row[count_column] = self._stringify_csv_value(count)
+                            all_columns.add(count_column)
 
         agreement_summary = summary.get("agreement", {}) if summary else {}
         if isinstance(agreement_summary, Mapping) and agreement_summary:
@@ -312,13 +373,18 @@ class TaggerPerformanceReport:
         ):
             _add_field(name)
 
-        for name in (
-            "pattern_strategy",
-        ):
-            _add_field(name)
+        pattern_strategy_columns = sorted(
+            column
+            for column in all_columns
+            if column.startswith("pattern") and column.endswith("strategy")
+        )
+        for column in pattern_strategy_columns:
+            _add_field(column)
 
         pattern_columns = sorted(
-            column for column in all_columns if column.startswith("pattern_count_")
+            column
+            for column in all_columns
+            if column.startswith("pattern") and "_count_" in column
         )
         for column in pattern_columns:
             _add_field(column)
