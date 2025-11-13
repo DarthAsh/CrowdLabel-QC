@@ -14,9 +14,7 @@ import statistics
 
 from .interfaces import TaggingSpeedStrategy
 
-
 TRIM_FRACTION = 0.1
-
 
 class TrimmedMeanTaggingSpeed(TaggingSpeedStrategy):
     """Tagging speed: trimmed mean of inter-tag intervals in seconds.

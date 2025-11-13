@@ -178,6 +178,7 @@ class Tagger:
         strategy = LogTrimTaggingSpeed()
         mean_log2 = strategy.speed_log2(self)
         return strategy.seconds_per_tag(mean_log2)
+        
     
     def agreement_with(self, other: "Tagger", characteristic: Characteristic) -> float:
         """Calculate simple percent agreement with another tagger for a characteristic.

@@ -9,6 +9,7 @@ from qcc.domain.enums import TagValue
 from datetime import datetime, timedelta, timezone
 
 
+
 def make_empty_tagger() -> Tagger:
     return Tagger(id="t0", meta=None, tagassignments=[])
 
@@ -21,7 +22,6 @@ def test_speed_strategy_returns_zero_for_insufficient_data():
 
 def test_log_trim_speed_trims_outliers():
     """Intervals with a single large outlier should be trimmed before mean.
-
     We create 11 timestamps that produce 10 intervals: nine intervals of 4s
     and one outlier of 1024s. TRIM_FRACTION is 0.1 so the single largest
     interval should be trimmed leaving nine log2(4) == 2.0 values.
@@ -55,7 +55,7 @@ def test_log_trim_speed_trims_outliers():
 def test_speed_strategy_is_pure_by_contract():
     strat = LogTrimTaggingSpeed()
     t = make_empty_tagger()
-    # Deterministic: repeated calls with same input return same result
+        # Deterministic: repeated calls with same input return same result
     a = strat.speed_log2(t)
     b = strat.speed_log2(t)
     assert a == b
