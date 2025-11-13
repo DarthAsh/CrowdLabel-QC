@@ -1,44 +1,63 @@
 from __future__ import annotations
 
-"""Skeleton tagging-speed strategy implementation.
-
-This module provides a named strategy class for the log2+trim tagging-speed
-algorithm. It is a skeleton only: methods raise NotImplementedError and
-contain TODO notes pointing to the original implementation in
-`qcc.domain.tagger` which should be ported in a follow-up PR.
+"""
+tagging-speed strategy implementation.
 
 Constraints:
 - Pure, deterministic, no I/O
 - Use forward refs for domain types to avoid circular imports
 """
 
-from typing import Any
+from typing import List
+import math
+import statistics
 
 from .interfaces import TaggingSpeedStrategy
 
+TRIM_FRACTION = 0.1
 
-class LogTrimTaggingSpeed(TaggingSpeedStrategy):
-    """Skeleton for tagging speed: log2 of inter-tag intervals with top-tail trim.
+class TrimmedMeanTaggingSpeed(TaggingSpeedStrategy):
+    """Tagging speed: trimmed mean of inter-tag intervals in seconds.
 
-    This class intentionally does not implement the algorithm yet. The
-    implementation should port the commented original code from
-    `qcc.domain.tagger.Tagger.tagging_speed`.
+    For a given tagger, compute the time in seconds between consecutive
+    tag assignments, sort those intervals, drop the slowest
+    TRIM_FRACTION fraction, and return the mean of the remaining
+    intervals. The result is "seconds per tag" ignoring long idle gaps.
     """
 
-    def speed_log2(self, tagger: "Tagger") -> float:
-        """Return mean log2(seconds) between tags.
+    def speed_seconds(self, tagger: "Tagger") -> float:
+        valid = [
+            ta for ta in (tagger.tagassignments or [])
+            if getattr(ta, "timestamp", None) is not None
+        ]
+        if len(valid) < 2:
+            return 0.0
 
-        Skeleton only: raise NotImplementedError until porting is complete.
-        """
-        # TODO: Port logic from Tagger.tagging_speed (log2 intervals + trim top 10% by length)
-        #       Use the commented code in Tagger as the source of truth.
-        raise NotImplementedError("LogTrimTaggingSpeed.speed_log2 not implemented")
+        sorted_assignments = sorted(valid, key=lambda ta: ta.timestamp)
+        intervals: List[float] = []
+        for i in range(1, len(sorted_assignments)):
+            t0 = sorted_assignments[i - 1].timestamp
+            t1 = sorted_assignments[i].timestamp
+            try:
+                delta_seconds = (t1 - t0).total_seconds()
+            except Exception:
+                continue
+            if delta_seconds > 0:
+                intervals.append(delta_seconds)
 
-    @staticmethod
-    def seconds_per_tag(mean_log2: float) -> float:
-        """Convert mean_log2 back to seconds-per-tag (2 ** mean_log2).
+        if not intervals:
+            return 0.0
 
-        Skeleton only: keeps signature for callers to rely on during migration.
-        """
-        # TODO: Implement in the logic-port PR; keep pure and deterministic.
-        raise NotImplementedError("LogTrimTaggingSpeed.seconds_per_tag not implemented")
+        intervals_sorted = sorted(intervals)
+        n = len(intervals_sorted)
+        trim_count = int(math.floor(n * TRIM_FRACTION))  # 10%
+
+        if trim_count > 0:
+            trimmed = intervals_sorted[: max(1, n - trim_count)]
+        else:
+            trimmed = intervals_sorted
+
+        try:
+            return float(statistics.mean(trimmed))
+        except statistics.StatisticsError:
+            return 0.0
