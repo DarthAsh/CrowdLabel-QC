@@ -3,8 +3,8 @@
 Protocols describe pure, deterministic, no-I/O strategy contracts. Use forward
 references for domain types to avoid circular imports.
 """
-from itertools import product
 from __future__ import annotations
+from itertools import product
 from collections import defaultdict
 from typing import Dict, Iterable, Protocol
 import re
@@ -139,22 +139,30 @@ class PatternSignalsStrategy(Protocol):
             patterns[pattern_length] = cur_patterns
 
         patterns_to_remove = {}
-        # Discard larger patterns (of length 4 and 3), that have at least one smaller pattern (length 3 or length 2) as a building block. Patterns of length 1 will be ignored, since these are atomic, so they will always be building blocks.
-        for key in sorted(patterns.keys(), reverse=True):
-            if key > 2:
-                cur_patterns = patterns[key]
-                smaller_patterns = []
-                patterns_to_discard = []
 
-                for i in range(2, key):
-                    smaller_patterns.extend(patterns[i])
+        # # Discard larger patterns (of length 4 and 3), that have at least one smaller pattern (length 3 or length 2) as a building block. Patterns of length 1 will be ignored, since these are atomic, so they will always be building blocks.
+        large_patterns = patterns.get(4, [])
+        small_patterns = patterns.get(2, [])
+        for pattern in large_patterns:
+            # check if made of 2 identical patterns
+            first_half = pattern[:2]
+            second_half = pattern[2:]
+
+        # for key in sorted(patterns.keys(), reverse=True):
+        #     if key > 2:
+        #         cur_patterns = patterns[key]
+        #         smaller_patterns = []
+        #         patterns_to_discard = []
+
+        #         for i in range(2, key):
+        #             smaller_patterns.extend(patterns[i])
                 
-                for pattern in cur_patterns:
-                    if any(small_pattern in pattern for small_pattern in smaller_patterns):
-                        patterns_to_discard.append(pattern)
-                patterns_to_remove[key] = patterns_to_discard
-            else:
-                break
+        #         for pattern in cur_patterns:
+        #             if any(small_pattern in pattern for small_pattern in smaller_patterns):
+        #                 patterns_to_discard.append(pattern)
+        #         patterns_to_remove[key] = patterns_to_discard
+        #     else:
+        #         break
 
         for key, to_delete in patterns_to_remove.items():
             patterns[key] = [p for p in patterns[key] if p not in to_delete]
@@ -178,16 +186,20 @@ class PatternSignalsStrategy(Protocol):
 
         max_pattern_counts = {}
         all_pattern_counts = {}
+
         for counts in pattern_frequency.values():
             all_pattern_counts.update(counts)
 
-        for canon, patterns in rot_groups.items():        
+        for canon, patterns in rot_groups.items():      
             max_pattern = max(patterns, key=lambda p: all_pattern_counts[p])
-            # TODO - what if there are multiple max patterns? Need to handle that
-            max_count = all_pattern_counts[max_pattern]
-            max_pattern_counts[max_pattern] = max_count
 
-        # For each rotation group, find pattern with max  occurrences, and create a key-value pair => {"patternWithMaxOccurrence": # of occurrences}. Append this key-value pair to pattern_frequency map.
-        return max_pattern_counts
+            # TODO - what if there are multiple max patterns in one cyclic rotation? Currently, the first of the maxes will be printed.
+            # For each rotation group, find pattern with max  occurrences, and create a key-value pair => {"patternWithMaxOccurrence": # of occurrences}. Append this key-value pair to pattern_frequency map.
+            max_count = all_pattern_counts[max_pattern]
+
+            if max_count > 0:
+                max_pattern_counts[max_pattern] = max_count
+
         # Output pattern_frequency map
+        return max_pattern_counts
         
