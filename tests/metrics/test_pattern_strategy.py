@@ -197,3 +197,7 @@ def test_horizontal_pattern_detection(pattern_str, expected, generate_mock_data)
     actual = strategy.analyze(tagger)
 
     assert actual == expected
+
+
+# TODO - need a test scenario where both vertical and horizontal patterns exist to ensure each pattern detection strategy filters
+# correctly
