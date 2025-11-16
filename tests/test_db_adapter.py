@@ -6,14 +6,15 @@ import pytest
 
 import csv
 
-from qcc.cli.main import _build_summary, _write_summary_csv
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.data_ingestion.mysql_importer import DEFAULT_TAG_PROMPT_TABLES
 from qcc.io.db_adapter import DBAdapter
 from qcc.domain.enums import TagValue
+from qcc.domain.characteristic import Characteristic
 from qcc.domain.comment import Comment
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
+from qcc.reports.tagger_performance import TaggerPerformanceReport
 
 
 class FakeImporter:
@@ -147,11 +148,15 @@ def test_db_adapter_merges_answers_with_tags():
     assert deployments["5"]["question_id"] == "7"
     assert deployments["5"]["prompt_label"] == "Spam?"
 
-    summary = _build_summary(domain_objects)
+    report = TaggerPerformanceReport(domain_objects["assignments"])
+    summary = report.generate_summary_report(
+        domain_objects.get("taggers", []),
+        domain_objects.get("characteristics", []),
+    )
     assert "tagger_speed" in summary
     speed_summary = summary["tagger_speed"]
     assert speed_summary["strategy"] == "LogTrimTaggingSpeed"
-    assert "taggers_with_speed" in speed_summary
+    assert "per_tagger" in speed_summary
 
 
 def test_read_assignments_applies_limit():
@@ -263,14 +268,15 @@ def test_summary_includes_speed_metrics():
         "questions": [],
     }
 
-    summary = _build_summary(domain_objects)
+    report = TaggerPerformanceReport(domain_objects["assignments"])
+    summary = report.generate_summary_report(
+        domain_objects.get("taggers", []),
+        domain_objects.get("characteristics", []),
+    )
 
     speed_metrics = summary["tagger_speed"]
-    assert speed_metrics["taggers_with_speed"] == 1
-    assert speed_metrics["seconds_per_tag"]["mean"] == pytest.approx(8.0)
-    assert speed_metrics["seconds_per_tag"]["median"] == pytest.approx(8.0)
-
     per_tagger = {entry["tagger_id"]: entry for entry in speed_metrics["per_tagger"]}
+    assert len(per_tagger) == 1
     assert per_tagger["42"]["mean_log2"] == pytest.approx(3.0)
     assert per_tagger["42"]["seconds_per_tag"] == pytest.approx(8.0)
 
@@ -329,7 +335,11 @@ def test_summary_includes_pattern_metrics(tmp_path):
         "questions": [],
     }
 
-    summary = _build_summary(domain_objects)
+    report = TaggerPerformanceReport(domain_objects["assignments"])
+    summary = report.generate_summary_report(
+        domain_objects.get("taggers", []),
+        domain_objects.get("characteristics", []),
+    )
 
     pattern_summary = summary["pattern_detection"]
     assert pattern_summary["strategy"] == "HorizontalPatternDetection"
@@ -343,33 +353,20 @@ def test_summary_includes_pattern_metrics(tmp_path):
         "YYYN",
         "YNNN",
     ]
-    assert pattern_summary["taggers_with_patterns"] == 1
-    assert pattern_summary["aggregate_counts"] == {"YN": 2}
-
     per_tagger = {entry["tagger_id"]: entry for entry in pattern_summary["per_tagger"]}
     assert per_tagger["42"]["patterns"] == {"YN": 2}
 
     csv_path = tmp_path / "summary.csv"
-    _write_summary_csv(summary, csv_path)
+    report.export_to_csv(summary, csv_path)
 
     with csv_path.open(newline="", encoding="utf-8") as fh:
         rows = list(csv.DictReader(fh))
 
-    assert any(
-        row["Strategy"] == "Pattern Detection"
-        and row["user_id"] == "aggregate"
-        and row["Metric"] == "pattern_YN"
-        and row["Value"] == "2"
-        for row in rows
-    )
+    assert all(row["user_id"] != "aggregate" for row in rows)
 
-    assert any(
-        row["Strategy"] == "Pattern Detection"
-        and row["user_id"] == "42"
-        and row["Metric"] == "pattern_YN"
-        and row["Value"] == "2"
-        for row in rows
-    )
+    tagger_row = next(row for row in rows if row["user_id"] == "42")
+    assert tagger_row["pattern_strategy"] == "HorizontalPatternDetection"
+    assert tagger_row["pattern_count_YN"] == "2"
 
 
 def test_db_adapter_handles_camel_cased_answer_identifiers():
@@ -407,3 +404,89 @@ def test_db_adapter_handles_camel_cased_answer_identifiers():
     assert answers_output[0]["id"] == "501"
     assert answers_output[0]["question_id"] == "321"
 
+
+def test_db_adapter_logs_invalid_rows(caplog):
+    caplog.set_level("ERROR")
+
+    tables = {
+        "answer_tags": [
+            {
+                "id": 1,
+                "answer_id": 101,
+                "tag_prompt_deployment_id": 5,
+                "user_id": "trouble-user",
+                # intentionally omit "value" to trigger a parsing error
+            }
+        ]
+    }
+
+    adapter = _make_adapter(tables)
+
+    with pytest.raises(ValueError):
+        adapter.read_assignments()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("user_id=trouble-user" in message for message in messages)
+
+
+def test_tagger_performance_report_includes_agreement_summary():
+    base_time = datetime(2024, 1, 1, 12, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="1",
+            comment_id="c1",
+            characteristic_id="char",
+            value=TagValue.YES,
+            timestamp=base_time,
+        ),
+        TagAssignment(
+            tagger_id="2",
+            comment_id="c1",
+            characteristic_id="char",
+            value=TagValue.YES,
+            timestamp=base_time + timedelta(minutes=1),
+        ),
+        TagAssignment(
+            tagger_id="1",
+            comment_id="c2",
+            characteristic_id="char",
+            value=TagValue.NO,
+            timestamp=base_time + timedelta(minutes=2),
+        ),
+        TagAssignment(
+            tagger_id="2",
+            comment_id="c2",
+            characteristic_id="char",
+            value=TagValue.NO,
+            timestamp=base_time + timedelta(minutes=3),
+        ),
+    ]
+
+    taggers = [
+        Tagger(id="1", meta=None, tagassignments=[assignments[0], assignments[2]]),
+        Tagger(id="2", meta=None, tagassignments=[assignments[1], assignments[3]]),
+    ]
+    characteristics = [Characteristic("char", "Spam?")]
+
+    report = TaggerPerformanceReport(assignments)
+    summary = report.generate_summary_report(
+        taggers,
+        characteristics,
+        include_agreement=True,
+    )
+
+    agreement = summary.get("agreement")
+    assert agreement["strategy"] == "LatestLabelPercentAgreement"
+    per_characteristic = agreement["per_characteristic"]
+    assert len(per_characteristic) == 1
+
+    char_entry = per_characteristic[0]
+    assert char_entry["characteristic_id"] == "char"
+    assert char_entry["percent_agreement"] == pytest.approx(1.0)
+    assert char_entry["cohens_kappa"] == pytest.approx(1.0)
+    assert char_entry["krippendorffs_alpha"] == 1.0
+    per_tagger = {entry["tagger_id"]: entry for entry in char_entry["per_tagger"]}
+    assert per_tagger["1"]["percent_agreement"] == pytest.approx(1.0)
+    assert per_tagger["1"]["cohens_kappa"] == pytest.approx(1.0)
+    assert per_tagger["2"]["percent_agreement"] == pytest.approx(1.0)
+    assert per_tagger["2"]["cohens_kappa"] == pytest.approx(1.0)

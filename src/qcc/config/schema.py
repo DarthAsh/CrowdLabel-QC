@@ -133,11 +133,17 @@ class ReportingConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     """Logging configuration settings."""
-    
+
     level: str = Field(default="INFO", description="Logging level")
     format: str = Field(
         default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         description="Log message format"
+    )
+    file: Optional[str] = Field(
+        default="qcc.log",
+        description=(
+            "Log file name or path (relative paths are resolved within the output directory)"
+        ),
     )
 
 

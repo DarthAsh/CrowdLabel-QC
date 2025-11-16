@@ -57,4 +57,5 @@ reporting:
 logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "qcc.log"
 

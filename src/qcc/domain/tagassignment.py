@@ -2,15 +2,13 @@ from __future__ import annotations
 
 """TagAssignment domain model for crowd labeling quality control."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-if TYPE_CHECKING:
-        from qcc.domain.enums import TagValue
-        from qcc.domain.tagger import Tagger
-        from qcc.domain.characteristic import Characteristic
-        from qcc.domain.comment import Comment
+from qcc.domain.enums import TagValue
 
 @dataclass(frozen=True)
 class TagAssignment:
@@ -28,18 +26,21 @@ class TagAssignment:
         timestamp: When the assignment was made
     """
     
-    tagger: Tagger
-    comment: Comment
-    characteristic: Characteristic
+    tagger_id: str
+    comment_id: str
+    characteristic_id: str
     value: TagValue
     timestamp: datetime
+    assignment_id: Optional[str] = None
+    prompt_id: Optional[str] = None
+    team_id: Optional[str] = None
     
     def __post_init__(self) -> None:
         """Validate the tag assignment."""
-        if not self.tagger:
-            raise ValueError("tagger cannot be empty")
-        if not self.comment:
-            raise ValueError("comment cannot be empty")
-        if not self.characteristic:
-            raise ValueError("characteristic cannot be empty")
+        if not self.tagger_id:
+            raise ValueError("tagger_id cannot be empty")
+        if not self.comment_id:
+            raise ValueError("comment_id cannot be empty")
+        if not self.characteristic_id:
+            raise ValueError("characteristic_id cannot be empty")
 
