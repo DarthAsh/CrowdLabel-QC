@@ -164,12 +164,13 @@ class PatternSignalsStrategy(Protocol):
         track_4 = defaultdict(list)
 
         while sub_start < len(assignment_sequence) - (substring_length - 1):
-            cur_sub = assignment_sequence[sub_start : sub_start + substring_length]
+            cur_sub = "".join(assignment_sequence[sub_start : sub_start + substring_length])
+        
             first_pattern = cur_sub[0:4]
             # expected = first_pattern * 3
             expected = first_pattern * (substring_length // len(first_pattern))
             if cur_sub == expected:
-                track_4[cur_sub].append(sub_start)
+                track_4[first_pattern].append(sub_start)
                 sub_start += substring_length
             else:
                 sub_start += 1
@@ -180,9 +181,9 @@ class PatternSignalsStrategy(Protocol):
         
         sub_start = 0
         track_3 = defaultdict(list)
-        
+
         while sub_start < len(assignment_sequence) - (substring_length - 1):
-            cur_sub = assignment_sequence[sub_start : sub_start + substring_length]
+            cur_sub = "".join(assignment_sequence[sub_start : sub_start + substring_length])
             if "#" in cur_sub:
                 sub_start += substring_length
                 continue
@@ -191,7 +192,7 @@ class PatternSignalsStrategy(Protocol):
                 # expected = first_pattern * 4
                 expected = first_pattern * (substring_length // len(first_pattern))
                 if cur_sub == expected:
-                    track_3[cur_sub].append(sub_start)
+                    track_3[first_pattern].append(sub_start)
                     sub_start += substring_length
                 else:
                     sub_start += 1
