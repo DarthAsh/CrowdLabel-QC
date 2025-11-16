@@ -55,6 +55,12 @@ The command connects to MySQL with the configured credentials, imports the
 crowd-labeling tables, and writes `summary.json` under the chosen output
 directory.
 
+## Reports and metrics
+
+See [`docs/REPORTS.md`](docs/REPORTS.md) for a detailed description of the
+reports produced by QCC, including how tagging speed, pattern detection, and
+agreement metrics are calculated and exported.
+
 ## Development
 
 
