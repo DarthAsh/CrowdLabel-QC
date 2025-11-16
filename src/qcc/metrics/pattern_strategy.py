@@ -47,31 +47,23 @@ class VerticalPatternDetection(PatternSignalsStrategy):
         assignments = list(tagger.tagassignments or [])
 
         # SORT assignments in ascending order (since I assume that that is how the student has assigned the tags)
+
+        # only use assignments that have a timestamp
+        marked_assignments = (ta for ta in assignments if getattr(ta, "timestamp", None) is not None)
+
         sorted_assignments = sorted(
-            assignments,
-            key=lambda ta: (
-                0,
-                getattr(ta, "timestamp", None),
-            )
-            if getattr(ta, "timestamp", None) is not None
-            else (1, 0),
+            marked_assignments, key=lambda ta: ta.timestamp,
         )
 
         # Filter list to only contain TagAssignments for given Characteristic
+        search_char_id = getattr(char, "id", None)
         char_assignments = []
         for assignment in sorted_assignments:
-            characteristic = getattr(assignment, "characteristic", None)
-            if characteristic is not None:
-                if characteristic == char:
-                    char_assignments.append(assignment)
-                    continue
-
             characteristic_id = getattr(assignment, "characteristic_id", None)
-            if characteristic_id is not None and getattr(char, "id", None) == characteristic_id:
+            if characteristic_id is not None and search_char_id == characteristic_id:
                 char_assignments.append(assignment)
 
         return self.generate_pattern_frequency(char_assignments)
-
     
 
 class HorizontalPatternDetection(PatternSignalsStrategy):
@@ -91,21 +83,18 @@ class HorizontalPatternDetection(PatternSignalsStrategy):
         Returns:
             dict: A dictionary such that the key represents a pattern, and the value represents the frequency of its occurrences.
         """
-
-
+        
         # Plan
         # Get list of TagAssignments for Tagger
         assignments = list(tagger.tagassignments or [])
 
         # SORT assignments in ascending order (since I assume that that is how the student has assigned the tags)
+        # only use assignments that have a timestamp
+        marked_assignments = (ta for ta in assignments if getattr(ta, "timestamp", None) is not None)
+
         sorted_assignments = sorted(
-            assignments,
-            key=lambda ta: (
-                0,
-                getattr(ta, "timestamp", None),
-            )
-            if getattr(ta, "timestamp", None) is not None
-            else (1, 0),
-        )
+            marked_assignments, key=lambda ta: ta.timestamp,
+        )        
+
 
         return self.generate_pattern_frequency(sorted_assignments)
