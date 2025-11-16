@@ -110,7 +110,7 @@ class PatternSignalsStrategy(Protocol):
         return min(rotations)
     
     def generate_pattern_frequency(
-        self, tag_assignments: Iterable["TagAssignment"]
+        self, tag_assignments: Iterable["TagAssignment"], substring_length = 12
     ) -> Dict[str, int]:
         """Function that creates a dictionary representing the number of times each pattern in PatternCollection is repeated
         in tag_assignments
@@ -121,85 +121,144 @@ class PatternSignalsStrategy(Protocol):
         Returns:
             Dict[str, int]: A dictionary such that the key represents a pattern, and the value represents the frequency of its occurrences.
         """
-        assignment_sequence = self.build_sequence_str(tag_assignments)
 
-        atomic_patterns = ["Y", "N"]
+        # New algo
+        # For each position in sequence, take that tag assignemnt and the next 11
+        # Within this substring, determine whether there are length-4 patterns that are continously repeated (3x)
+        # determine whether there are length-3 patterns that are continously repeated (4x)
+        # For a suffix tree, the number of leaves for a given node are the number of repeats.
+        # Given a suffix tree for length 12 substring, we look at the leaves of nodes with height 4 or more(top to bottom),
+        # and if there are 3 leaves of the height 4 node, contiguous repeats of length-4 pattern have been found
+        # add length-4 pattern to track, and "1", where 1 refers to 1 contigious 12-length repeat.
+
+        # For length-3, we look at the leaves of nodes with height 3 or more (top to bottom),
+        # and if there are 4 leaves of the height 3 node, contiguous repeats of length-3 pattern have been found
+        # add length-3 pattern to track, and "1", where 1 refers to 1 contiguous 12-length repeat
+
+        # Repeat for each 12-length substring
+
+        # before final output, add up all occurrences of cyclic equivalence of each pattern?
+        # slightly confused about 1-off overlaps...maybe cyclic equivalence takes care of that? In that case, occurrences shouldn't be added up.
+
+        # while building suffix tree, each node could have
+        #  - a height field, which would get updated every time a new suffix longer than existing suffixes starting with that node is found
+        #  - an n_leaves field, which would get updated every time a new suffix starting with that node is found
+        #  then searching for length-4 patterns would essentially be looking at the children of the root node,
+        #  check each of the children node's height, if height is >= 4, then check n_leaves of the 4th node = 3. If yes,
+        # length-4 pattern has been found, and stop search - since no other length-4 pattern occurrences will be possible
+        # 
+
+        # 2nd algo:
+        # I don't think the sliding window approach would be accurate - how do you account for the window "sliding" - where patterns are detected in each window?
+        # Maybe a second approach could be to build a suffix tree of the entire sequence of tag assignments - if Ukkonen's algo can be used, the time complexity would not be awful
+        # although the space complexity could be O(n^2)
+        # then after creating the suffix tree, we look at all paths with nodes >= 4 for length-4 patterns, and check what proportion of the indices are contiguous.
+        # for length-3 patterns, look at all paths with nodes >= 3, and check what proportion of the indices are contiguous
+        # maybe we can define proportion dependent on what the result of N/12 is, where N is the total number of tags in sequence
+        # N/12 would tell us how many max blocks of size 12 there would be if starting from index 0 (non-sliding window)
+        # if there are 24 tags, then there are 2 blocks each of 12 tags, but what does that mean?
+        # 
+        
+        assignment_sequence = list(self.build_sequence_str(tag_assignments))
+        sub_start = 0
+        track_4 = defaultdict(list)
+
+        while sub_start < len(assignment_sequence) - (substring_length - 1):
+            cur_sub = assignment_sequence[sub_start : sub_start + substring_length]
+            first_pattern = cur_sub[0:4]
+            # expected = first_pattern * 3
+            expected = first_pattern * (substring_length // len(first_pattern))
+            if cur_sub == expected:
+                track_4[cur_sub].append(sub_start)
+                sub_start += substring_length
+            else:
+                sub_start += 1
+        
+        for length_4_occurrences in track_4.values():
+            for start_pos in length_4_occurrences:
+                assignment_sequence[start_pos: start_pos + substring_length] = "#"
+        
+        sub_start = 0
+        track_3 = defaultdict(list)
+        
+        while sub_start < len(assignment_sequence) - (substring_length - 1):
+            cur_sub = assignment_sequence[sub_start : sub_start + substring_length]
+            if "#" in cur_sub:
+                sub_start += substring_length
+                continue
+            else:
+                first_pattern = cur_sub[0:3]
+                # expected = first_pattern * 4
+                expected = first_pattern * (substring_length // len(first_pattern))
+                if cur_sub == expected:
+                    track_3[cur_sub].append(sub_start)
+                    sub_start += substring_length
+                else:
+                    sub_start += 1
+        
+        all_detected_patterns = {}
+        for pattern, occurences in track_4.items():
+            all_detected_patterns[pattern] = len(occurences)
+        for pattern, occurences in track_3.items():
+            all_detected_patterns[pattern] = len(occurences)
+
+        return all_detected_patterns
+        
+        # assignment_sequence = self.build_sequence_str(tag_assignments)
+
+        # atomic_patterns = ["Y", "N"]
         
 
-        patterns = {1: atomic_patterns}
+        # patterns = {1: atomic_patterns}
 
-        # repeated cartesian product to create exhaustive list of patterns
-        for pattern_length in range(2, 5):
-            cur_patterns = []
+        # # repeated cartesian product to create exhaustive list of patterns
+        # for pattern_length in range(2, 5):
+        #     cur_patterns = []
             
-            for bits in product('YN', repeat = pattern_length):
-                cur_pattern_str = ''.join(bits)
-                cur_patterns.append(cur_pattern_str)
+        #     for bits in product('YN', repeat = pattern_length):
+        #         cur_pattern_str = ''.join(bits)
+        #         cur_patterns.append(cur_pattern_str)
 
-            patterns[pattern_length] = cur_patterns
+        #     patterns[pattern_length] = cur_patterns
 
-        patterns_to_remove = {}
+        # patterns_to_remove = {}
 
-        # # Discard larger patterns (of length 4 and 3), that have at least one smaller pattern (length 3 or length 2) as a building block. Patterns of length 1 will be ignored, since these are atomic, so they will always be building blocks.
-        # large_patterns = patterns.get(4, [])
-        # small_patterns = patterns.get(2, [])
-        # for pattern in large_patterns:
-        #     # check if made of 2 identical patterns
-        #     first_half = pattern[:2]
-        #     second_half = pattern[2:]
-
-        # for key in sorted(patterns.keys(), reverse=True):
-        #     if key > 2:
-        #         cur_patterns = patterns[key]
-        #         smaller_patterns = []
-        #         patterns_to_discard = []
-
-        #         for i in range(2, key):
-        #             smaller_patterns.extend(patterns[i])
-                
-        #         for pattern in cur_patterns:
-        #             if any(small_pattern in pattern for small_pattern in smaller_patterns):
-        #                 patterns_to_discard.append(pattern)
-        #         patterns_to_remove[key] = patterns_to_discard
-        #     else:
-        #         break
-
-        for key, to_delete in patterns_to_remove.items():
-            patterns[key] = [p for p in patterns[key] if p not in to_delete]
+        # for key, to_delete in patterns_to_remove.items():
+        #     patterns[key] = [p for p in patterns[key] if p not in to_delete]
 
         
-        pattern_frequency = {}
+        # pattern_frequency = {}
 
-        # For each remaining pattern, count repetition within tag assignment sequence.
-        for key, pattern_list in patterns.items():
-            patterns_count = {}
-            for pattern in pattern_list:
-                patterns_count[pattern] = self.count_pattern_repetition(pattern, assignment_sequence)
-            pattern_frequency[key] = patterns_count
+        # # For each remaining pattern, count repetition within tag assignment sequence.
+        # for key, pattern_list in patterns.items():
+        #     patterns_count = {}
+        #     for pattern in pattern_list:
+        #         patterns_count[pattern] = self.count_pattern_repetition(pattern, assignment_sequence)
+        #     pattern_frequency[key] = patterns_count
 
-        rot_groups = defaultdict(list)
-        # Next, identify patterns that are rotations of each other, and group those together - we will call these rotation groups. 
-        for patterns_count in pattern_frequency.values():
-            for pattern in patterns_count:
-                canon = self.canonical_rotation(pattern)
-                rot_groups[canon].append(pattern)
+        # rot_groups = defaultdict(list)
+        # # Next, identify patterns that are rotations of each other, and group those together - we will call these rotation groups. 
+        # for patterns_count in pattern_frequency.values():
+        #     for pattern in patterns_count:
+        #         canon = self.canonical_rotation(pattern)
+        #         rot_groups[canon].append(pattern)
 
-        max_pattern_counts = {}
-        all_pattern_counts = {}
+        # max_pattern_counts = {}
+        # all_pattern_counts = {}
 
-        for counts in pattern_frequency.values():
-            all_pattern_counts.update(counts)
+        # for counts in pattern_frequency.values():
+        #     all_pattern_counts.update(counts)
 
-        for canon, patterns in rot_groups.items():      
-            max_pattern = max(patterns, key=lambda p: all_pattern_counts[p])
+        # for canon, patterns in rot_groups.items():      
+        #     max_pattern = max(patterns, key=lambda p: all_pattern_counts[p])
 
-            # TODO - what if there are multiple max patterns in one cyclic rotation? Currently, the first of the maxes will be printed.
-            # For each rotation group, find pattern with max  occurrences, and create a key-value pair => {"patternWithMaxOccurrence": # of occurrences}. Append this key-value pair to pattern_frequency map.
-            max_count = all_pattern_counts[max_pattern]
+        #     # TODO - what if there are multiple max patterns in one cyclic rotation? Currently, the first of the maxes will be printed.
+        #     # For each rotation group, find pattern with max  occurrences, and create a key-value pair => {"patternWithMaxOccurrence": # of occurrences}. Append this key-value pair to pattern_frequency map.
+        #     max_count = all_pattern_counts[max_pattern]
 
-            if max_count > 0:
-                max_pattern_counts[max_pattern] = max_count
+        #     if max_count > 0:
+        #         max_pattern_counts[max_pattern] = max_count
 
-        # Output pattern_frequency map
-        return max_pattern_counts
+        # # Output pattern_frequency map
+        # return max_pattern_counts
         
