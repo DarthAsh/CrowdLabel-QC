@@ -36,7 +36,7 @@ def generate_mock_data():
     tagger1 = Tagger("1", [])
     # tagger2 = Tagger("2", [])
 
-    return {"tagger" : tagger1, "comments": comments, "chars": chars}
+    return {"tagger" : tagger1, "comments": comments, "chars": chars, "search_char" : chars[0]}
 
 def generate_comments():
     comments = []
@@ -62,6 +62,8 @@ def create_custom_assignment_pattern_vertical(pattern: str, pattern_occurrences:
 
     # create assignment on various comments
     comment_counter = 0
+    tagger_id = tagger.id
+    charac_id = charac.id
     for _ in range(pattern_occurrences):
         for tag_val_char in pattern:
             time_param = start_time + counter * interval
@@ -72,9 +74,9 @@ def create_custom_assignment_pattern_vertical(pattern: str, pattern_occurrences:
             comment_counter = comment_counter % len(comments)
 
             if tag_val_char == "Y":
-                cur_assignment = TagAssignment(tagger, comment, charac, TagValue.YES, time_param)
+                cur_assignment = TagAssignment(tagger_id, comment.id, charac_id, TagValue.YES, time_param)
             elif tag_val_char == "N":
-                cur_assignment = TagAssignment(tagger, comment, charac, TagValue.NO, time_param)
+                cur_assignment = TagAssignment(tagger_id, comment.id, charac_id, TagValue.NO, time_param)
             else:
                 raise ValueError("Invalid pattern character! Can only be Y or N.")
             
@@ -101,6 +103,7 @@ def create_custom_assignment_pattern_horizontal(pattern: str, pattern_occurrence
 
     comment_counter = 0
     char_counter = 0
+    tagger_id = tagger.id
     for _ in range(pattern_occurrences):
         for tag_val_char in pattern:
             time_param = start_time + counter * interval
@@ -115,9 +118,9 @@ def create_custom_assignment_pattern_horizontal(pattern: str, pattern_occurrence
             char_counter = char_counter % len(characs)
 
             if tag_val_char == "Y":
-                cur_assignment = TagAssignment(tagger, comment, charac, TagValue.YES, time_param)
+                cur_assignment = TagAssignment(tagger_id, comment.id, charac.id, TagValue.YES, time_param)
             elif tag_val_char == "N":
-                cur_assignment = TagAssignment(tagger, comment, charac, TagValue.NO, time_param)
+                cur_assignment = TagAssignment(tagger_id, comment.id, charac.id, TagValue.NO, time_param)
             else:
                 raise ValueError("Invalid pattern character! Can only be Y or N.")
             
@@ -133,6 +136,7 @@ def set_scenario(pattern: str, strategy: str, mock_data):
     tagger = mock_data["tagger"]
     comments = mock_data["comments"]
     chars = mock_data["chars"]
+    search_char = mock_data["search_char"]
 
     if strategy == "V":
         strategy_obj = VerticalPatternDetection()
