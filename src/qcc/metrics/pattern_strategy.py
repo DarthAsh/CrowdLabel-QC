@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, Optional
 from .interfaces import PatternSignalsStrategy
-
+from ..domain import enums
 class VerticalPatternDetection(PatternSignalsStrategy):
     """
     Class to detect if there are patterns for tag assignments for specific characteristics
@@ -48,8 +48,12 @@ class VerticalPatternDetection(PatternSignalsStrategy):
 
         # SORT assignments in ascending order (since I assume that that is how the student has assigned the tags)
 
-        # only use assignments that have a timestamp
-        marked_assignments = (ta for ta in assignments if getattr(ta, "timestamp", None) is not None)
+        # only use assignments that have a timestamp, and a Yes/No value
+        marked_assignments = (
+            ta for ta in assignments
+            if getattr(ta, "timestamp", None) is not None
+            and (ta.value in (enums.TagValue.YES, enums.TagValue.NO))
+        )
 
         sorted_assignments = sorted(
             marked_assignments, key=lambda ta: ta.timestamp,
@@ -89,8 +93,12 @@ class HorizontalPatternDetection(PatternSignalsStrategy):
         assignments = list(tagger.tagassignments or [])
 
         # SORT assignments in ascending order (since I assume that that is how the student has assigned the tags)
-        # only use assignments that have a timestamp
-        marked_assignments = (ta for ta in assignments if getattr(ta, "timestamp", None) is not None)
+        # only use assignments that have a timestamp, and a Yes/No value
+        marked_assignments = (
+            ta for ta in assignments
+            if getattr(ta, "timestamp", None) is not None
+            and (ta.value in (enums.TagValue.YES, enums.TagValue.NO))
+        )
 
         sorted_assignments = sorted(
             marked_assignments, key=lambda ta: ta.timestamp,
