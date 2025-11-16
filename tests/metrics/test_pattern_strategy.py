@@ -156,10 +156,14 @@ def set_scenario(pattern: str, strategy: str, mock_data):
 @pytest.mark.parametrize(
     "pattern_str, expected",
     [
-        ("YN", { "N": 1, "Y" : 1, "YN" : 1}),
-        ("YYNYYNNY", {"N" : 3, "Y" : 5, "YY" : 2,"YN" : 2, "NN" : 1,"YYN" : 2,"YNN" : 1,"YYNY" : 1,"YYNN" : 1}),
-        ("YNNYYNNY", {"Y" : 4,"N" : 4,"YN" : 2,"NN" : 2, "YY" : 1,"YNN" : 2, "YYN" : 1,"YNNY" : 2}),
-        ("YNNYYNY", {"Y" : 4,"N" : 3,"YN" : 2,"NN" : 1,"YY" : 1,"YNN" : 1,"YYN" : 1,"YNNY" : 1, "YYNY" : 1})
+        ("YNYYNYYNYYNY", { "YNY" : 1}),
+        ("NYNYYNYYNYYNY", { "YNY" : 1}),
+        ("YYNYYNYYNYYNY", { "YYN" : 1}),                              
+        ("YNYYYNYYYNYY", { "YNYY" : 1}),
+        ("NYNYYYNYYYNYY", { "YNYY" : 1}),
+        ("YNYYNYYNYYNYYYNYYYNYYYNYY", { "YYNY" : 1}),
+        ("YNYYNYYNYYNYNYYNYYYNYYYNY", { "YNY" : 1, "YYNY": 1}),        
+        ("YNYYYNYYYNYY", { "YNYY" : 1}),        
     ]    
 )
 def test_vertical_pattern_detection(pattern_str, expected, generate_mock_data):
@@ -174,10 +178,15 @@ def test_vertical_pattern_detection(pattern_str, expected, generate_mock_data):
 @pytest.mark.parametrize(
     "pattern_str, expected",
     [
-        ("YN", { "N": 1, "Y" : 1, "YN" : 1}),
-        ("YYNYYNNY", {"N" : 3, "Y" : 5, "YY" : 2,"YN" : 2, "NN" : 1,"YYN" : 2,"YNN" : 1,"YYNY" : 1,"YYNN" : 1}),
-        ("YNNYYNNY", {"Y" : 4,"N" : 4,"YN" : 2,"NN" : 2, "YY" : 1,"YNN" : 2, "YYN" : 1,"YNNY" : 2}),
-        ("YNNYYNY", {"Y" : 4,"N" : 3,"YN" : 2,"NN" : 1,"YY" : 1,"YNN" : 1,"YYN" : 1,"YNNY" : 1, "YYNY" : 1})
+        ("YNYYNYYNYYNY", { "YNY" : 1}),
+        ("NYNYYNYYNYYNY", { "YNY" : 1}),
+        ("YYNYYNYYNYYNY", { "YYN" : 1}),                              
+        ("YNYYYNYYYNYY", { "YNYY" : 1}),
+        ("NYNYYYNYYYNYY", { "YNYY" : 1}),
+        ("YNYYNYYNYYNYYYNYYYNYYYNYY", { "YYNY" : 1}),
+        ("YNYYNYYNYYNYNYYNYYYNYYYNY", { "YNY" : 1, "YYNY": 1}),                
+        ("YNYYYNYYYNYY", { "YNYY" : 1}),
+        
     ]    
 )
 def test_horizontal_pattern_detection(pattern_str, expected, generate_mock_data):
