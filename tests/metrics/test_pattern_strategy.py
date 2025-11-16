@@ -161,9 +161,15 @@ def set_scenario(pattern: str, strategy: str, mock_data):
         ("YYNYYNYYNYYNY", { "YYN" : 1}),                              
         ("YNYYYNYYYNYY", { "YNYY" : 1}),
         ("NYNYYYNYYYNYY", { "YNYY" : 1}),
+        ("YNYYNYYNYYNYNNYNYYNYYNYYNY", { "YNY" : 2}),
         ("YNYYNYYNYYNYYYNYYYNYYYNYY", { "YYNY" : 1}),
-        ("YNYYNYYNYYNYNYYNYYYNYYYNY", { "YNY" : 1, "YYNY": 1}),        
-        ("YNYYYNYYYNYY", { "YNYY" : 1}),        
+        ("YNYYNYYNYYNYNYYNYYYNYYYNY", { "YNY" : 1, "YYNY": 1}),                
+        ("YNYYYNYYYNYY", { "YNYY" : 1}),
+        ("YNYYYNYYYNYYYNYYYNYYYNYY", { "YNYY" : 2}),
+        ("YNYYYNYYYNYYNYYNYNYNYNYNYN", { "YNYY" : 1, "YNYN" : 1}),
+        ("NNYYNNNYYYNN", {}),
+        ("YNYYNYYNYYNYNNYYNNNYYYNNYNYYNYYNYYNY", { "YNY" : 2}),
+        ("YNYYYNYYYNYYNNYYNNNYYYNNYNYYYNYYYNYY", { "YNYY" : 2})
     ]    
 )
 def test_vertical_pattern_detection(pattern_str, expected, generate_mock_data):
@@ -183,10 +189,15 @@ def test_vertical_pattern_detection(pattern_str, expected, generate_mock_data):
         ("YYNYYNYYNYYNY", { "YYN" : 1}),                              
         ("YNYYYNYYYNYY", { "YNYY" : 1}),
         ("NYNYYYNYYYNYY", { "YNYY" : 1}),
+        ("YNYYNYYNYYNYNNYNYYNYYNYYNY", { "YNY" : 2}),
         ("YNYYNYYNYYNYYYNYYYNYYYNYY", { "YYNY" : 1}),
         ("YNYYNYYNYYNYNYYNYYYNYYYNY", { "YNY" : 1, "YYNY": 1}),                
         ("YNYYYNYYYNYY", { "YNYY" : 1}),
-        
+        ("YNYYYNYYYNYYYNYYYNYYYNYY", { "YNYY" : 2}),
+        ("YNYYYNYYYNYYNYYNYNYNYNYNYN", { "YNYY" : 1, "YNYN" : 1}),
+        ("NNYYNNNYYYNN", {}),
+        ("YNYYNYYNYYNYNNYYNNNYYYNNYNYYNYYNYYNY", { "YNY" : 2}),
+        ("YNYYYNYYYNYYNNYYNNNYYYNNYNYYYNYYYNYY", { "YNYY" : 2})
     ]    
 )
 def test_horizontal_pattern_detection(pattern_str, expected, generate_mock_data):
@@ -197,7 +208,4 @@ def test_horizontal_pattern_detection(pattern_str, expected, generate_mock_data)
     actual = strategy.analyze(tagger)
 
     assert actual == expected
-
-
-# TODO - need a test scenario where both vertical and horizontal patterns exist to ensure each pattern detection strategy filters
-# correctly
+    
