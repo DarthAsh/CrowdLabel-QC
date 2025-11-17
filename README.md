@@ -52,8 +52,8 @@ PYTHONPATH=src python -m qcc.cli.main --help
    ```
 
 The command connects to MySQL with the configured credentials, imports the
-crowd-labeling tables, and writes `summary.json` under the chosen output
-directory.
+crowd-labeling tables, and writes `summary.json` plus a timestamped
+`summary-YYYYMMDD-HHMMSS.csv` under the chosen output directory.
 
 ## Reports and metrics
 

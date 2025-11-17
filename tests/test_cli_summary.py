@@ -14,6 +14,12 @@ def _read_csv_rows(csv_path: Path):
         return list(csv.DictReader(csv_file))
 
 
+def _find_summary_csv(output_dir: Path) -> Path:
+    csv_paths = sorted(output_dir.glob("summary-*.csv"))
+    assert len(csv_paths) == 1
+    return csv_paths[0]
+
+
 def test_write_summary_creates_csv(tmp_path):
     output_dir = Path(tmp_path)
     result = {
@@ -53,8 +59,7 @@ def test_write_summary_creates_csv(tmp_path):
 
     write_summary(result, output_dir)
 
-    csv_path = output_dir / "summary.csv"
-    assert csv_path.exists()
+    csv_path = _find_summary_csv(output_dir)
 
     rows = _read_csv_rows(csv_path)
     assert {row["user_id"] for row in rows} == {"worker-1", "worker-2"}
@@ -89,8 +94,7 @@ def test_write_summary_handles_missing_speed_data(tmp_path):
 
     write_summary(result, output_dir)
 
-    csv_path = output_dir / "summary.csv"
-    assert csv_path.exists()
+    csv_path = _find_summary_csv(output_dir)
 
     rows = _read_csv_rows(csv_path)
 
