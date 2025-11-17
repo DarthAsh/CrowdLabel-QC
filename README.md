@@ -64,12 +64,15 @@ Follow these steps to spin up the CLI against a MySQL database from scratch:
    installers to provision a local MySQL server.
 
 2. **Import the SQL dump.** Load your exported labeling tables into MySQL
-   (e.g., `mysql -u <user> -p <database> < dump.sql`). Ensure the imported
-   schema matches the columns expected by your QCC configuration.
+   (for example, `mysql -u <user> -p <database> < dump.sql`). Confirm the
+   import succeeds and that the resulting tables match the columns expected
+   by your QCC configuration (task assignments, tags, timestamps, etc.).
 
 3. **Update the config for your connection.** Open your YAML config (for
    example, `src/qcc/config/default.yml`) and set the `input.mysql` values to
-   match your host, port, user, password, and database name.
+   match your host, port, user, password, and database name. If the dump uses
+   a non-default schema or table names, align the `input.mysql.tables`
+   mappings accordingly so the CLI reads from the correct tables.
 
 4. **Run the tagging report.** Execute the CLI, pointing to your config and an
    output directory for the generated artifacts. On Windows, for example:
