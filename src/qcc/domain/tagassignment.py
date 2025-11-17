@@ -1,11 +1,12 @@
+from __future__ import annotations
+
 """TagAssignment domain model for crowd labeling quality control."""
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from qcc.domain.enums import TagValue
-
 
 @dataclass(frozen=True)
 class TagAssignment:
@@ -28,6 +29,9 @@ class TagAssignment:
     characteristic_id: str
     value: TagValue
     timestamp: datetime
+    assignment_id: Optional[str] = None
+    prompt_id: Optional[str] = None
+    team_id: Optional[str] = None
     
     def __post_init__(self) -> None:
         """Validate the tag assignment."""

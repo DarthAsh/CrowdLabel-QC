@@ -1,25 +1,7 @@
-from __future__ import annotations
+"""Metrics strategy and helper exports."""
 
-"""Public exports for the qcc.metrics package.
+from .agreement import AgreementMetrics
+from .patterns import PatternMetrics
+from .speed import SpeedMetrics
 
-Exports the strategy Protocols and the named speed strategy skeleton.
-"""
-
-from .interfaces import TaggingSpeedStrategy, AgreementStrategy, PatternSignalsStrategy
-from .speed_strategy import LogTrimTaggingSpeed
-
-__all__ = [
-    "TaggingSpeedStrategy",
-    "AgreementStrategy",
-    "PatternSignalsStrategy",
-    "LogTrimTaggingSpeed",
-]
-from .interfaces import TaggingSpeedStrategy, AgreementStrategy, PatternSignalsStrategy
-from .default_strategies import DefaultTaggingSpeedStrategy
-
-__all__ = [
-    "TaggingSpeedStrategy",
-    "AgreementStrategy",
-    "PatternSignalsStrategy",
-    "DefaultTaggingSpeedStrategy",
-]
+__all__ = ["AgreementMetrics", "PatternMetrics", "SpeedMetrics"]

@@ -6,9 +6,39 @@ from pydantic import BaseModel, Field
 
 class InputConfig(BaseModel):
     """Input configuration settings."""
-    
-    format: str = Field(default="csv", description="Input format (csv, db)")
-    path: str = Field(default="", description="Path to input file or database connection string")
+
+    format: str = Field(default="csv", description="Input format (csv, mysql)")
+    path: Optional[str] = Field(
+        default=None,
+        description="Path to input file when using the CSV input format",
+    )
+    mysql: "MySQLInputConfig" = Field(
+        default_factory=lambda: MySQLInputConfig(),
+        description="MySQL connection settings when using the mysql input format",
+    )
+
+
+class MySQLInputConfig(BaseModel):
+    """MySQL-specific connection configuration."""
+
+    host: Optional[str] = Field(default=None, description="MySQL server hostname")
+    port: Optional[int] = Field(default=None, description="MySQL server port")
+    user: Optional[str] = Field(default=None, description="MySQL user name")
+    password: Optional[str] = Field(default=None, description="MySQL user password")
+    database: Optional[str] = Field(default=None, description="Database name")
+    charset: Optional[str] = Field(default=None, description="Connection character set")
+    use_pure: bool = Field(
+        default=False,
+        description="Force mysql.connector to use the pure Python implementation",
+    )
+    env_prefix: str = Field(
+        default="MYSQL",
+        description="Environment variable prefix used to fill missing MySQL settings",
+    )
+    dsn: Optional[str] = Field(
+        default=None,
+        description="Optional DSN string (mysql://user:pass@host:port/db) overriding other values",
+    )
 
 
 class OutputConfig(BaseModel):
@@ -103,11 +133,17 @@ class ReportingConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     """Logging configuration settings."""
-    
+
     level: str = Field(default="INFO", description="Logging level")
     format: str = Field(
         default="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         description="Log message format"
+    )
+    file: Optional[str] = Field(
+        default="qcc.log",
+        description=(
+            "Log file name or path (relative paths are resolved within the output directory)"
+        ),
     )
 
 

@@ -6,19 +6,30 @@ from contextlib import contextmanager
 import re
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
-import mysql.connector
-
 from .mysql_config import MySQLConfig
 
 DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = (
-    "tag_prompt_deployment_answers",
-    "tag_prompt_deployment_confidences",
+    "answer_tags",
+    "answers",
+    "tag_prompt_deployments",
+    "tag_prompts",
+    "questions",
 )
 
 
 @contextmanager
 def mysql_connection(config: MySQLConfig):
     """Context manager that yields an open MySQL connection."""
+
+    try:
+        import mysql.connector  # type: ignore[import-not-found]
+    except ModuleNotFoundError as exc:  # pragma: no cover - import guard
+        message = (
+            "mysql-connector-python is required to use the MySQL input adapter. "
+            "Install it with `pip install mysql-connector-python` or provide an "
+            "alternative driver that exposes the `mysql.connector` module."
+        )
+        raise ModuleNotFoundError(message) from exc
 
     connection = mysql.connector.connect(**config.as_connector_kwargs())
     try:
@@ -95,3 +106,37 @@ def import_tag_prompt_deployment_tables(
 
     importer = TableImporter(config)
     return importer.import_tables(tables, limit=limit)
+
+# # src/qcc/data_ingestion/mysql_importer.py
+# import mysql.connector
+# from contextlib import contextmanager
+
+# class TableImporter:
+#     def __init__(self, config: MySQLConfig):
+#         self.config = config
+
+#     @contextmanager
+#     def _conn(self):
+#         cnx = mysql.connector.connect(**self.config.as_connector_kwargs())
+#         try:
+#             yield cnx
+#         finally:
+#             cnx.close()
+
+#     def import_tables(self, tables, limit=None):
+#         results = {}
+#         with self._conn() as cnx:
+#             cur = cnx.cursor(dictionary=True)
+#             for t in tables:
+#                 q = f"SELECT * FROM `{t}`"
+#                 if limit:
+#                     q += f" LIMIT {int(limit)}"
+#                 cur.execute(q)
+#                 results[t] = [dict(row) for row in cur.fetchall()]
+#             cur.close()
+#         return results
+
+# def import_tag_prompt_deployments(config: MySQLConfig, tables=DEFAULT_TAG_PROMPT_TABLES, limit=None):
+#     importer = TableImporter(config)
+#     return importer.import_tables(tables, limit=limit)
+

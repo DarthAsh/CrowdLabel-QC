@@ -2,8 +2,18 @@
 
 # Input/Output settings
 input:
-  format: "csv"  # csv, db
-  path: ""  # Path to input file or database connection string
+  format: "mysql"  # csv, mysql
+  path: null  # Path to input CSV file (used when format is csv)
+  mysql:
+    host: localhost
+    port: 3306
+    user: root
+    password: root
+    database: mysql
+    charset: null
+    use_pure: true
+    env_prefix: "MYSQL"
+    dsn: null
 
 output:
   directory: "reports"
@@ -47,4 +57,5 @@ reporting:
 logging:
   level: "INFO"  # DEBUG, INFO, WARNING, ERROR
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "qcc.log"
 
