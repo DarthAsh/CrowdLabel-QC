@@ -84,6 +84,8 @@ Follow these steps to spin up the CLI against a MySQL database from scratch:
 The CLI will connect with your configured credentials, read the imported
 MySQL data, and emit the JSON summary plus the timestamped `tagging-report-*.csv`
 into the target output directory.
+To run use the command:
+python -m qcc.cli.main run --config "<your directory>\\CrowdLabel-QC\src\qcc\config\default.yml" --in ignored.csv --out <output directory>
 
 ## Reports and metrics
 
