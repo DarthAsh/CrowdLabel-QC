@@ -56,6 +56,32 @@ The command connects to MySQL with the configured credentials, imports the
 crowd-labeling tables, and writes `summary.json` plus a timestamped
 `tagging-report-YYYYMMDD-HHMMSS.csv` under the chosen output directory.
 
+### Minimal MySQL setup steps
+
+Follow these steps to spin up the CLI against a MySQL database from scratch:
+
+1. **Install MySQL.** Use your platform’s package manager or the official
+   installers to provision a local MySQL server.
+
+2. **Import the SQL dump.** Load your exported labeling tables into MySQL
+   (e.g., `mysql -u <user> -p <database> < dump.sql`). Ensure the imported
+   schema matches the columns expected by your QCC configuration.
+
+3. **Update the config for your connection.** Open your YAML config (for
+   example, `src/qcc/config/default.yml`) and set the `input.mysql` values to
+   match your host, port, user, password, and database name.
+
+4. **Run the tagging report.** Execute the CLI, pointing to your config and an
+   output directory for the generated artifacts. On Windows, for example:
+
+   ```bash
+   python -m qcc.cli.main run --config "D:\\Independent Study\\CrowdLabel-QC\\src\\qcc\\config\\default.yml" --in ignored.csv --out <your directory path>
+   ```
+
+The CLI will connect with your configured credentials, read the imported
+MySQL data, and emit the JSON summary plus the timestamped `tagging-report-*.csv`
+into the target output directory.
+
 ## Reports and metrics
 
 See [`docs/REPORTS.md`](docs/REPORTS.md) for a detailed description of the
