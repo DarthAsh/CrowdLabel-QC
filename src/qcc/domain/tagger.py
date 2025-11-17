@@ -21,7 +21,7 @@ MIN_ALTERNATION_SEQUENCE = 10
 NGRAM_REPEAT_THRESHOLD = 5
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class Tagger:
     """A tagger (crowd worker) who makes label assignments.
     
