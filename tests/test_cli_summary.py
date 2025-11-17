@@ -15,7 +15,7 @@ def _read_csv_rows(csv_path: Path):
 
 
 def _find_summary_csv(output_dir: Path) -> Path:
-    csv_paths = sorted(output_dir.glob("summary-*.csv"))
+    csv_paths = sorted(output_dir.glob("tagging-report-*.csv"))
     assert len(csv_paths) == 1
     return csv_paths[0]
 

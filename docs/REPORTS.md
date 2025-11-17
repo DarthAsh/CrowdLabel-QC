@@ -3,7 +3,7 @@
 This document summarizes what each reporting surface in QCC produces and how
 its metrics are calculated. Use it as a quick reference when interpreting
 `summary.json` output or CSV exports produced by the CLI. CSV exports are
-written as timestamped files (e.g., `summary-20240620-153045.csv`).
+written as timestamped files (e.g., `tagging-report-20240620-153045.csv`).
 
 ## Tagger performance report
 

@@ -40,7 +40,8 @@ PYTHONPATH=src python -m qcc.cli.main --help
    ```
 
 2. Run the CLI, choosing any placeholder path for `--in` (it is ignored when
-   `input.format` is `mysql`) and an output directory for the generated summary.
+   `input.format` is `mysql`) and an output directory for the generated tagging
+   report.
 
    **Command:**
 
@@ -53,7 +54,7 @@ PYTHONPATH=src python -m qcc.cli.main --help
 
 The command connects to MySQL with the configured credentials, imports the
 crowd-labeling tables, and writes `summary.json` plus a timestamped
-`summary-YYYYMMDD-HHMMSS.csv` under the chosen output directory.
+`tagging-report-YYYYMMDD-HHMMSS.csv` under the chosen output directory.
 
 ## Reports and metrics
 

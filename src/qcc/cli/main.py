@@ -301,7 +301,7 @@ def run_analysis(
         include_agreement=True,
     )
 
-    csv_path = _timestamped_summary_csv_path(output_dir)
+    csv_path = _timestamped_tagging_report_csv_path(output_dir)
     report.export_to_csv(summary, csv_path)
 
     result = {
@@ -309,7 +309,7 @@ def run_analysis(
         "output_directory": str(output_dir),
         "config": config.dict(),
         "summary": summary,
-        "summary_csv_path": str(csv_path),
+        "tagging_report_csv_path": str(csv_path),
     }
 
     return result
@@ -330,21 +330,23 @@ def write_summary(result: dict, output_dir: Path) -> None:
     summary_data = result.get("summary") if isinstance(result, dict) else None
     if isinstance(summary_data, Mapping):
         report = TaggerPerformanceReport([])
-        csv_path = _resolve_summary_csv_path(result, output_dir)
+        csv_path = _resolve_tagging_report_csv_path(result, output_dir)
         report.export_to_csv(summary_data, csv_path)
 
 
-def _resolve_summary_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
-    csv_path = result.get("summary_csv_path") if isinstance(result, Mapping) else None
+def _resolve_tagging_report_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
+    csv_path = None
+    if isinstance(result, Mapping):
+        csv_path = result.get("tagging_report_csv_path") or result.get("summary_csv_path")
     if isinstance(csv_path, str) and csv_path:
         return Path(csv_path)
 
-    return _timestamped_summary_csv_path(output_dir)
+    return _timestamped_tagging_report_csv_path(output_dir)
 
 
-def _timestamped_summary_csv_path(output_dir: Path) -> Path:
+def _timestamped_tagging_report_csv_path(output_dir: Path) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    return output_dir / f"summary-{timestamp}.csv"
+    return output_dir / f"tagging-report-{timestamp}.csv"
 
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig

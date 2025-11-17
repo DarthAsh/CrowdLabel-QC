@@ -90,7 +90,7 @@ class TestCLISmoke:
             # CLI should complete successfully and produce the reports
             assert result.returncode == 0
             assert (output_dir / "summary.json").exists()
-            assert list(output_dir.glob("summary-*.csv"))
+            assert list(output_dir.glob("tagging-report-*.csv"))
             assert (output_dir / "qcc.log").exists()
     
     def test_cli_config_loading(self):
@@ -145,6 +145,6 @@ class TestCLISmoke:
             # Output directory should be created and the command should succeed
             assert result.returncode == 0
             assert (output_dir / "summary.json").exists()
-            assert list(output_dir.glob("summary-*.csv"))
+            assert list(output_dir.glob("tagging-report-*.csv"))
             assert (output_dir / "qcc.log").exists()
 
