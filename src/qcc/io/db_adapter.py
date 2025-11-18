@@ -183,6 +183,23 @@ class DBAdapter:
             if not isinstance(assignment, TagAssignment):  # pragma: no cover - defensive
                 raise ValueError(f"Invalid assignment row: {row!r}")
 
+            deployment_row = deployments_lookup.get(assignment.characteristic_id)
+            if deployment_row:
+                deployment_assignment_id = self._extract_optional(
+                    deployment_row, ["assignment_id", "question_id", "questionId"]
+                )
+                if deployment_assignment_id not in (None, ""):
+                    assignment = TagAssignment(
+                        tagger_id=assignment.tagger_id,
+                        comment_id=assignment.comment_id,
+                        characteristic_id=assignment.characteristic_id,
+                        value=assignment.value,
+                        timestamp=assignment.timestamp,
+                        assignment_id=str(deployment_assignment_id),
+                        prompt_id=assignment.prompt_id,
+                        team_id=assignment.team_id,
+                    )
+
             assignments.append(assignment)
             assignments_by_comment[assignment.comment_id].append(assignment)
             assignments_by_tagger[assignment.tagger_id].append(assignment)
@@ -603,12 +620,22 @@ class DBAdapter:
         )
         timestamp = self._parse_timestamp(timestamp_raw)
 
+        assignment_id = self._extract_optional(
+            row,
+            ["assignment_id", "question_id", "questionId"],
+        )
+        prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
+        team_id = self._extract_optional(row, ["team_id", "teamId"])
+
         return TagAssignment(
             tagger_id=tagger_id,
             comment_id=comment_id,
             characteristic_id=characteristic_id,
             value=tag_value,
             timestamp=timestamp,
+            assignment_id=str(assignment_id) if assignment_id not in (None, "") else None,
+            prompt_id=str(prompt_id) if prompt_id not in (None, "") else None,
+            team_id=str(team_id) if team_id not in (None, "") else None,
         )
 
     _NUMERIC_TAG_VALUE_MAP = {
