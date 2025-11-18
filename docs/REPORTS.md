@@ -11,6 +11,9 @@ written as timestamped files (e.g., `tagging-report-20240620-153045.csv`).
 pattern detection, and agreement (optional). The report accepts the full set of
 `Tagger` instances and the `TagAssignment` list they carry.
 
+For per-assignment visibility into pattern detection, see
+`PatternDetectionReport` below.
+
 ### Speed metrics
 
 Speed is calculated by the `LogTrimTaggingSpeed` strategy. For each tagger the
@@ -89,6 +92,24 @@ columnar CSV. Column prefixes indicate the source of each metric:
 Each row represents one tagger (`user_id`). Columns are added only when the
 corresponding metric exists in the summary payload, so the CSV remains compact
 for partial reports.
+
+## Assignment pattern detection report
+
+`PatternDetectionReport` produces assignment-level outputs for pattern detection
+so you can trace the signals back to individual tags. It reuses the horizontal
+and vertical perspectives:
+
+* **horizontal** – Chronological across all assignments for a tagger.
+* **vertical** – Per characteristic, then merged per tagger.
+
+The report returns every timestamped YES/NO assignment with metadata
+(`assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`, `team_id`,
+`timestamp`). Each assignment lists the pattern(s) that include it. Patterns are
+detected in 12-assignment windows using the same 3- and 4-token repeat logic as
+`TaggerPerformanceReport`.
+
+CSV exports include one row per assignment per perspective with a semicolon-
+delimited `patterns` column (empty when no patterns were detected).
 
 ## Characteristic reliability report
 
