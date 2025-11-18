@@ -183,6 +183,23 @@ class DBAdapter:
             if not isinstance(assignment, TagAssignment):  # pragma: no cover - defensive
                 raise ValueError(f"Invalid assignment row: {row!r}")
 
+            deployment_row = deployments_lookup.get(assignment.characteristic_id)
+            if assignment.assignment_id in (None, "") and deployment_row:
+                deployment_assignment_id = self._extract_optional(
+                    deployment_row, ["assignment_id", "question_id", "questionId"]
+                )
+                if deployment_assignment_id not in (None, ""):
+                    assignment = TagAssignment(
+                        tagger_id=assignment.tagger_id,
+                        comment_id=assignment.comment_id,
+                        characteristic_id=assignment.characteristic_id,
+                        value=assignment.value,
+                        timestamp=assignment.timestamp,
+                        assignment_id=str(deployment_assignment_id),
+                        prompt_id=assignment.prompt_id,
+                        team_id=assignment.team_id,
+                    )
+
             assignments.append(assignment)
             assignments_by_comment[assignment.comment_id].append(assignment)
             assignments_by_tagger[assignment.tagger_id].append(assignment)

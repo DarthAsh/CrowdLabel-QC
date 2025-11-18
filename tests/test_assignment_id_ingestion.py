@@ -42,3 +42,35 @@ def test_db_adapter_preserves_assignment_id():
     assert assignment.prompt_id == "prompt-2"
     assert assignment.team_id == "team-2"
 
+
+def test_db_adapter_uses_deployment_assignment_id():
+    importer = MagicMock()
+    adapter = DBAdapter(
+        MySQLConfig("host", "user", "password", "database"),
+        importer=importer,
+        tables=["assignments", "tag_prompt_deployments"],
+    )
+
+    assignments, _ = adapter._build_assignments(
+        [
+            {
+                "tagger_id": "worker-1",
+                "comment_id": "comment-1",
+                "characteristic_id": "deployment-1",
+                "value": 1,
+                "tagged_at": "2024-01-01T00:00:00Z",
+            }
+        ],
+        {
+            "tag_prompt_deployments": [
+                {
+                    "id": "deployment-1",
+                    "assignment_id": "assign-from-deployment",
+                }
+            ]
+        },
+    )
+
+    assert len(assignments) == 1
+    assert assignments[0].assignment_id == "assign-from-deployment"
+
