@@ -23,7 +23,10 @@ and how they are attached to taggers for reporting.
    value; the authoritative ID replaces any value from the assignment row. If
    an assignment ID is available but the row omitted a `tagger_id`, the
    adapter back-fills the tagger using the `assignment_questionnaires` mapping
-   keyed by `assignment_id` before creating the `TagAssignment`.
+   keyed by `assignment_id` before creating the `TagAssignment`. Rows missing
+   both a tagger ID and a corresponding `assignment_questionnaires` entry
+   cannot be ingested and will raise a `KeyError` so the missing ownership can
+   be corrected upstream.
 5. **Collect metadata** – As assignments are appended, the adapter groups them by
    comment and tagger, and records comment/characteristic/tagger metadata to
    support later object construction.
