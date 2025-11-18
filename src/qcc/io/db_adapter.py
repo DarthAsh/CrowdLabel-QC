@@ -109,6 +109,7 @@ class DBAdapter:
         deployments_lookup: Dict[str, Mapping[str, Any]] = {}
         prompts_lookup: Dict[str, Mapping[str, Any]] = {}
         questions_lookup: Dict[str, Mapping[str, Any]] = {}
+        assignment_questionnaires_lookup: Dict[str, str] = {}
         if table_data:
             answers_rows = table_data.get("answers") or []
             for answer in answers_rows:
@@ -150,6 +151,20 @@ class DBAdapter:
                     continue
                 questions_lookup[str(question_id)] = question
 
+            questionnaire_rows = table_data.get("assignment_questionnaires") or []
+            for questionnaire in questionnaire_rows:
+                assignment_id = self._extract_optional(
+                    questionnaire,
+                    ["assignment_id", "assignmentId"],
+                )
+                user_id = self._extract_optional(
+                    questionnaire,
+                    ["user_id", "userId", "tagger_id", "worker_id"],
+                )
+                if assignment_id in (None, "") or user_id in (None, ""):
+                    continue
+                assignment_questionnaires_lookup[str(user_id)] = str(assignment_id)
+
         assignments: List[TagAssignment] = []
         assignments_by_comment: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
         assignments_by_tagger: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
@@ -182,6 +197,32 @@ class DBAdapter:
 
             if not isinstance(assignment, TagAssignment):  # pragma: no cover - defensive
                 raise ValueError(f"Invalid assignment row: {row!r}")
+
+            questionnaire_assignment_id = assignment_questionnaires_lookup.get(
+                assignment.tagger_id
+            )
+            deployment_row = deployments_lookup.get(assignment.characteristic_id)
+            deployment_assignment_id: Optional[Any] = None
+            if deployment_row:
+                deployment_assignment_id = self._extract_optional(
+                    deployment_row, ["assignment_id", "question_id", "questionId"]
+                )
+
+            assignment_id_override = questionnaire_assignment_id
+            if assignment_id_override in (None, ""):
+                assignment_id_override = deployment_assignment_id
+
+            if assignment_id_override not in (None, ""):
+                assignment = TagAssignment(
+                    tagger_id=assignment.tagger_id,
+                    comment_id=assignment.comment_id,
+                    characteristic_id=assignment.characteristic_id,
+                    value=assignment.value,
+                    timestamp=assignment.timestamp,
+                    assignment_id=str(assignment_id_override),
+                    prompt_id=assignment.prompt_id,
+                    team_id=assignment.team_id,
+                )
 
             assignments.append(assignment)
             assignments_by_comment[assignment.comment_id].append(assignment)
@@ -603,12 +644,22 @@ class DBAdapter:
         )
         timestamp = self._parse_timestamp(timestamp_raw)
 
+        assignment_id = self._extract_optional(
+            row,
+            ["assignment_id", "question_id", "questionId"],
+        )
+        prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
+        team_id = self._extract_optional(row, ["team_id", "teamId"])
+
         return TagAssignment(
             tagger_id=tagger_id,
             comment_id=comment_id,
             characteristic_id=characteristic_id,
             value=tag_value,
             timestamp=timestamp,
+            assignment_id=str(assignment_id) if assignment_id not in (None, "") else None,
+            prompt_id=str(prompt_id) if prompt_id not in (None, "") else None,
+            team_id=str(team_id) if team_id not in (None, "") else None,
         )
 
     _NUMERIC_TAG_VALUE_MAP = {
