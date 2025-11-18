@@ -10,16 +10,20 @@ and how they are attached to taggers for reporting.
    supporting tables (`answers`, `assignment_questionnaires`,
    `tag_prompt_deployments`, `tag_prompts`, and `questions`) so assignment-level
    metadata can be enriched.
-3. **Parse each row** – `_row_to_assignment` extracts the required identifiers
-   (`tagger_id`, `comment_id`, `characteristic_id`) plus the tag value,
-   timestamp, and any provided prompt or team IDs, returning a `TagAssignment`
-   instance.
-4. **Override assignment IDs from authoritative tables** – When an
-   `assignment_questionnaires` row matches the assignment's `tagger_id`, its
-   `assignment_id` becomes the assignment identifier. If no questionnaire row
-   exists, a matching `tag_prompt_deployments` row (keyed by the
-   `characteristic_id`) contributes its `assignment_id`/`question_id` value. In
-   both cases, the authoritative ID replaces any value from the assignment row.
+3. **Parse each row** – `_parse_assignment_fields` extracts the required
+   identifiers (`comment_id`, `characteristic_id`), the tag value, timestamp,
+   any provided prompt or team IDs, and a `tagger_id` when present. Final
+   `TagAssignment` objects are instantiated after enrichment so missing tagger
+   IDs can be filled.
+4. **Override assignment IDs and fill missing taggers from authoritative tables** –
+   When an `assignment_questionnaires` row matches the assignment's
+   `tagger_id`, its `assignment_id` becomes the assignment identifier. If no
+   questionnaire row exists, a matching `tag_prompt_deployments` row (keyed by
+   the `characteristic_id`) contributes its `assignment_id`/`question_id`
+   value; the authoritative ID replaces any value from the assignment row. If
+   an assignment ID is available but the row omitted a `tagger_id`, the
+   adapter back-fills the tagger using the `assignment_questionnaires` mapping
+   keyed by `assignment_id` before creating the `TagAssignment`.
 5. **Collect metadata** – As assignments are appended, the adapter groups them by
    comment and tagger, and records comment/characteristic/tagger metadata to
    support later object construction.

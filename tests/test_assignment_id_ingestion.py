@@ -111,3 +111,38 @@ def test_db_adapter_prefers_assignment_questionnaires_over_deployment():
     assert len(assignments) == 1
     assert assignments[0].assignment_id == "assign-from-questionnaire"
 
+
+def test_db_adapter_backfills_tagger_from_assignment_questionnaire():
+    importer = MagicMock()
+    adapter = DBAdapter(
+        MySQLConfig("host", "user", "password", "database"),
+        importer=importer,
+        tables=["assignments", "assignment_questionnaires", "tag_prompt_deployments"],
+    )
+
+    assignments, _ = adapter._build_assignments(
+        [
+            {
+                "comment_id": "comment-1",
+                "characteristic_id": "deployment-1",
+                "value": 1,
+                "tagged_at": "2024-01-01T00:00:00Z",
+            }
+        ],
+        {
+            "assignment_questionnaires": [
+                {"assignment_id": "assign-from-deployment", "user_id": "worker-override"}
+            ],
+            "tag_prompt_deployments": [
+                {
+                    "id": "deployment-1",
+                    "assignment_id": "assign-from-deployment",
+                }
+            ],
+        },
+    )
+
+    assert len(assignments) == 1
+    assert assignments[0].assignment_id == "assign-from-deployment"
+    assert assignments[0].tagger_id == "worker-override"
+

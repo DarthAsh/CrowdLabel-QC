@@ -6,6 +6,7 @@ import logging
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, DefaultDict, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import NamedTuple
 
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.data_ingestion.mysql_importer import DEFAULT_TAG_PROMPT_TABLES, TableImporter
@@ -110,6 +111,7 @@ class DBAdapter:
         prompts_lookup: Dict[str, Mapping[str, Any]] = {}
         questions_lookup: Dict[str, Mapping[str, Any]] = {}
         assignment_questionnaires_lookup: Dict[str, str] = {}
+        assignment_questionnaires_by_assignment: Dict[str, str] = {}
         if table_data:
             answers_rows = table_data.get("answers") or []
             for answer in answers_rows:
@@ -163,7 +165,12 @@ class DBAdapter:
                 )
                 if assignment_id in (None, "") or user_id in (None, ""):
                     continue
-                assignment_questionnaires_lookup[str(user_id)] = str(assignment_id)
+                assignment_id_text = str(assignment_id)
+                user_id_text = str(user_id)
+                assignment_questionnaires_lookup[user_id_text] = assignment_id_text
+                assignment_questionnaires_by_assignment[assignment_id_text] = (
+                    user_id_text
+                )
 
         assignments: List[TagAssignment] = []
         assignments_by_comment: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
@@ -177,7 +184,42 @@ class DBAdapter:
                 raise ValueError("Invalid assignment row: None")
 
             try:
-                assignment = self._row_to_assignment(row)
+                parsed = self._parse_assignment_fields(row)
+
+                questionnaire_assignment_id = assignment_questionnaires_lookup.get(
+                    parsed.tagger_id
+                )
+
+                deployment_row = deployments_lookup.get(parsed.characteristic_id)
+                deployment_assignment_id: Optional[Any] = None
+                if deployment_row:
+                    deployment_assignment_id = self._extract_optional(
+                        deployment_row, ["assignment_id", "question_id", "questionId"]
+                    )
+
+                assignment_id_override = questionnaire_assignment_id
+                if assignment_id_override in (None, ""):
+                    assignment_id_override = deployment_assignment_id
+                if assignment_id_override in (None, ""):
+                    assignment_id_override = parsed.assignment_id
+
+                tagger_id_override = parsed.tagger_id
+                if tagger_id_override in (None, "") and assignment_id_override not in (None, ""):
+                    tagger_id_override = assignment_questionnaires_by_assignment.get(
+                        str(assignment_id_override)
+                    )
+
+                if tagger_id_override in (None, ""):
+                    raise KeyError(
+                        f"Missing required columns ['tagger_id', 'worker_id', 'user_id'] in row {row!r}"
+                    )
+
+                assignment = self._row_to_assignment(
+                    row,
+                    tagger_id_override=str(tagger_id_override),
+                    assignment_id_override=assignment_id_override,
+                )
+
             except (KeyError, ValueError, TypeError) as exc:  # pragma: no cover - defensive
                 user_identifier: Optional[Any]
                 try:
@@ -197,32 +239,6 @@ class DBAdapter:
 
             if not isinstance(assignment, TagAssignment):  # pragma: no cover - defensive
                 raise ValueError(f"Invalid assignment row: {row!r}")
-
-            questionnaire_assignment_id = assignment_questionnaires_lookup.get(
-                assignment.tagger_id
-            )
-            deployment_row = deployments_lookup.get(assignment.characteristic_id)
-            deployment_assignment_id: Optional[Any] = None
-            if deployment_row:
-                deployment_assignment_id = self._extract_optional(
-                    deployment_row, ["assignment_id", "question_id", "questionId"]
-                )
-
-            assignment_id_override = questionnaire_assignment_id
-            if assignment_id_override in (None, ""):
-                assignment_id_override = deployment_assignment_id
-
-            if assignment_id_override not in (None, ""):
-                assignment = TagAssignment(
-                    tagger_id=assignment.tagger_id,
-                    comment_id=assignment.comment_id,
-                    characteristic_id=assignment.characteristic_id,
-                    value=assignment.value,
-                    timestamp=assignment.timestamp,
-                    assignment_id=str(assignment_id_override),
-                    prompt_id=assignment.prompt_id,
-                    team_id=assignment.team_id,
-                )
 
             assignments.append(assignment)
             assignments_by_comment[assignment.comment_id].append(assignment)
@@ -530,6 +546,67 @@ class DBAdapter:
             )
         return prompts
 
+    class ParsedAssignmentRow(NamedTuple):
+        tagger_id: Optional[str]
+        comment_id: str
+        characteristic_id: str
+        value: TagValue
+        timestamp: datetime
+        assignment_id: Optional[str]
+        prompt_id: Optional[str]
+        team_id: Optional[str]
+
+    def _parse_assignment_fields(self, row: Mapping[str, Any]) -> ParsedAssignmentRow:
+        tagger_id = self._extract_optional(row, ["tagger_id", "worker_id", "user_id"])
+        comment_id = str(
+            self._extract_required(
+                row,
+                [
+                    "comment_id",
+                    "commentId",
+                    "item_id",
+                    "answer_id",
+                    "answerId",
+                ],
+            )
+        )
+        characteristic_id = str(
+            self._extract_required(
+                row,
+                [
+                    "characteristic_id",
+                    "characteristicId",
+                    "tag_prompt_deployment_characteristic_id",
+                    "tag_prompt_deployment_id",
+                ],
+            )
+        )
+        value_raw = self._extract_required(row, ["value", "answer", "tag_value"])
+        tag_value = self._parse_tag_value(value_raw)
+        timestamp_raw = self._extract_optional(
+            row,
+            ["tagged_at", "created_at", "updated_at", "timestamp"],
+        )
+        timestamp = self._parse_timestamp(timestamp_raw)
+
+        assignment_id = self._extract_optional(
+            row,
+            ["assignment_id", "question_id", "questionId"],
+        )
+        prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
+        team_id = self._extract_optional(row, ["team_id", "teamId"])
+
+        return self.ParsedAssignmentRow(
+            tagger_id=str(tagger_id) if tagger_id not in (None, "") else None,
+            comment_id=comment_id,
+            characteristic_id=characteristic_id,
+            value=tag_value,
+            timestamp=timestamp,
+            assignment_id=str(assignment_id) if assignment_id not in (None, "") else None,
+            prompt_id=str(prompt_id) if prompt_id not in (None, "") else None,
+            team_id=str(team_id) if team_id not in (None, "") else None,
+        )
+
     def _build_prompt_deployments(self, metadata: Mapping[str, Any]) -> List[Dict[str, Any]]:
         deployments_by_id: Mapping[str, Mapping[str, Any]] = metadata.get(
             "deployments_by_id", {}
@@ -609,57 +686,37 @@ class DBAdapter:
             )
         return questions
 
-    def _row_to_assignment(self, row: Mapping[str, Any]) -> TagAssignment:
-        tagger_id = str(
-            self._extract_required(row, ["tagger_id", "worker_id", "user_id"])
-        )
-        comment_id = str(
-            self._extract_required(
-                row,
-                [
-                    "comment_id",
-                    "commentId",
-                    "item_id",
-                    "answer_id",
-                    "answerId",
-                ],
-            )
-        )
-        characteristic_id = str(
-            self._extract_required(
-                row,
-                [
-                    "characteristic_id",
-                    "characteristicId",
-                    "tag_prompt_deployment_characteristic_id",
-                    "tag_prompt_deployment_id",
-                ],
-            )
-        )
-        value_raw = self._extract_required(row, ["value", "answer", "tag_value"])
-        tag_value = self._parse_tag_value(value_raw)
-        timestamp_raw = self._extract_optional(
-            row,
-            ["tagged_at", "created_at", "updated_at", "timestamp"],
-        )
-        timestamp = self._parse_timestamp(timestamp_raw)
+    def _row_to_assignment(
+        self,
+        row: Mapping[str, Any],
+        *,
+        tagger_id_override: Optional[Any] = None,
+        assignment_id_override: Optional[Any] = None,
+    ) -> TagAssignment:
+        parsed = self._parse_assignment_fields(row)
 
-        assignment_id = self._extract_optional(
-            row,
-            ["assignment_id", "question_id", "questionId"],
-        )
-        prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
-        team_id = self._extract_optional(row, ["team_id", "teamId"])
+        tagger_id = tagger_id_override
+        if tagger_id in (None, ""):
+            tagger_id = parsed.tagger_id
+
+        if tagger_id in (None, ""):
+            raise KeyError(
+                f"Missing required columns ['tagger_id', 'worker_id', 'user_id'] in row {row!r}"
+            )
+
+        assignment_id = assignment_id_override
+        if assignment_id in (None, ""):
+            assignment_id = parsed.assignment_id
 
         return TagAssignment(
-            tagger_id=tagger_id,
-            comment_id=comment_id,
-            characteristic_id=characteristic_id,
-            value=tag_value,
-            timestamp=timestamp,
+            tagger_id=str(tagger_id),
+            comment_id=parsed.comment_id,
+            characteristic_id=parsed.characteristic_id,
+            value=parsed.value,
+            timestamp=parsed.timestamp,
             assignment_id=str(assignment_id) if assignment_id not in (None, "") else None,
-            prompt_id=str(prompt_id) if prompt_id not in (None, "") else None,
-            team_id=str(team_id) if team_id not in (None, "") else None,
+            prompt_id=parsed.prompt_id,
+            team_id=parsed.team_id,
         )
 
     _NUMERIC_TAG_VALUE_MAP = {
