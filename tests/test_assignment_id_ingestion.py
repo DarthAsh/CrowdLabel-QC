@@ -59,6 +59,7 @@ def test_db_adapter_uses_deployment_assignment_id():
                 "characteristic_id": "deployment-1",
                 "value": 1,
                 "tagged_at": "2024-01-01T00:00:00Z",
+                "assignment_id": "assign-from-row",
             }
         ],
         {

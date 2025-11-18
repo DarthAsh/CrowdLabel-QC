@@ -184,7 +184,7 @@ class DBAdapter:
                 raise ValueError(f"Invalid assignment row: {row!r}")
 
             deployment_row = deployments_lookup.get(assignment.characteristic_id)
-            if assignment.assignment_id in (None, "") and deployment_row:
+            if deployment_row:
                 deployment_assignment_id = self._extract_optional(
                     deployment_row, ["assignment_id", "question_id", "questionId"]
                 )
