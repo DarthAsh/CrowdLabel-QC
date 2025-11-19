@@ -110,7 +110,7 @@ class DBAdapter:
         deployments_lookup: Dict[str, Mapping[str, Any]] = {}
         prompts_lookup: Dict[str, Mapping[str, Any]] = {}
         questions_lookup: Dict[str, Mapping[str, Any]] = {}
-        assignment_questionnaires_by_questionnaire: Dict[str, str] = {}
+        assignment_questionnaires_by_questionnaire: Dict[str, Dict[str, Optional[str]]] = {}
 
         total_assignments: Optional[int] = None
         try:
@@ -172,11 +172,13 @@ class DBAdapter:
                     questionnaire,
                     ["questionnaire_id", "questionnaireId"],
                 )
+                user_id = self._extract_optional(questionnaire, ["user_id", "userId"])
                 if assignment_id in (None, "") or questionnaire_id in (None, ""):
                     continue
-                assignment_questionnaires_by_questionnaire[str(questionnaire_id)] = str(
-                    assignment_id
-                )
+                assignment_questionnaires_by_questionnaire[str(questionnaire_id)] = {
+                    "assignment_id": str(assignment_id),
+                    "user_id": str(user_id) if user_id not in (None, "") else None,
+                }
 
         assignments: List[TagAssignment] = []
         assignments_by_comment: DefaultDict[str, List[TagAssignment]] = defaultdict(list)
@@ -220,10 +222,18 @@ class DBAdapter:
                             question_row, ["questionnaire_id", "questionnaireId"]
                         )
                 questionnaire_assignment_id = None
+                questionnaire_user_id: Optional[Any] = None
                 if questionnaire_id not in (None, ""):
-                    questionnaire_assignment_id = assignment_questionnaires_by_questionnaire.get(
+                    questionnaire_assignment_entry = assignment_questionnaires_by_questionnaire.get(
                         str(questionnaire_id)
                     )
+                    if questionnaire_assignment_entry:
+                        questionnaire_assignment_id = questionnaire_assignment_entry.get(
+                            "assignment_id"
+                        )
+                        questionnaire_user_id = questionnaire_assignment_entry.get(
+                            "user_id"
+                        )
 
                 assignment_id_override = questionnaire_assignment_id
                 assignment_id_source = "questionnaire"
@@ -239,6 +249,8 @@ class DBAdapter:
                 assignment_id_sources[assignment_id_source] += 1
 
                 tagger_id_override = parsed.tagger_id
+                if tagger_id_override in (None, ""):
+                    tagger_id_override = questionnaire_user_id
                 if tagger_id_override in (None, ""):
                     raise KeyError(
                         f"Missing required columns ['tagger_id', 'worker_id', 'user_id'] in row {row!r}"

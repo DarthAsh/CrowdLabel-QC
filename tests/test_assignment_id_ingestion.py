@@ -91,6 +91,54 @@ def test_db_adapter_resolves_assignment_via_questionnaire_chain():
     assert assignments[0].assignment_id == "assign-from-questionnaire"
 
 
+def test_db_adapter_uses_questionnaire_user_when_tagger_missing():
+    importer = MagicMock()
+    adapter = DBAdapter(
+        MySQLConfig("host", "user", "password", "database"),
+        importer=importer,
+        tables=[
+            "assignments",
+            "answers",
+            "questions",
+            "assignment_questionnaires",
+            "tag_prompt_deployments",
+        ],
+    )
+
+    assignments, _ = adapter._build_assignments(
+        [
+            {
+                "comment_id": "comment-1",
+                "characteristic_id": "deployment-1",
+                "value": 1,
+                "tagged_at": "2024-01-01T00:00:00Z",
+            }
+        ],
+        {
+            "answers": [
+                {"id": "comment-1", "question_id": "question-1"},
+            ],
+            "questions": [
+                {"id": "question-1", "questionnaire_id": "questionnaire-1"}
+            ],
+            "assignment_questionnaires": [
+                {
+                    "questionnaire_id": "questionnaire-1",
+                    "assignment_id": "assign-from-questionnaire",
+                    "user_id": "worker-99",
+                }
+            ],
+            "tag_prompt_deployments": [
+                {"id": "deployment-1", "assignment_id": "assign-from-deployment"}
+            ],
+        },
+    )
+
+    assert len(assignments) == 1
+    assert assignments[0].assignment_id == "assign-from-questionnaire"
+    assert assignments[0].tagger_id == "worker-99"
+
+
 def test_db_adapter_uses_deployment_when_questionnaire_missing():
     importer = MagicMock()
     adapter = DBAdapter(
