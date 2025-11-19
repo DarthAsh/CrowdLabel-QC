@@ -5,6 +5,16 @@ its metrics are calculated. Use it as a quick reference when interpreting
 `summary.json` output or CSV exports produced by the CLI. CSV exports are
 written as timestamped files (e.g., `tagging-report-20240620-153045.csv`).
 
+## Data inputs and object model
+
+Reports consume the domain objects built by the MySQL importer. Assignment rows
+from the first configured table (typically `answer_tags`) are enriched via
+`answers` → `questions` → `assignment_questionnaires` to recover the
+authoritative `assignment_id`, with `tag_prompt_deployments` supplying a
+secondary assignment ID when needed. Rows missing a tagger are rejected during
+parsing. The resulting `TagAssignment` objects (plus comments, taggers,
+characteristics, prompts, and questions) are what the report classes read.
+
 ## Tagger performance report
 
 `TaggerPerformanceReport` bundles three families of metrics: tagging speed,
