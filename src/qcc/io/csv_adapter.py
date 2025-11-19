@@ -252,6 +252,18 @@ class CSVAdapter:
         value_raw = row.get("value")
         timestamp_raw = row.get("tagged_at")
 
+        assignment_id = row.get("assignment_id")
+        if assignment_id is not None:
+            assignment_id = str(assignment_id).strip() or None
+
+        prompt_id = row.get("prompt_id") or row.get("prompt")
+        if prompt_id is not None:
+            prompt_id = str(prompt_id).strip() or None
+
+        team_id = row.get("team_id")
+        if team_id is not None:
+            team_id = str(team_id).strip() or None
+
         if not tagger_id or not comment_id or not characteristic_id:
             raise ValueError(f"Missing required identifiers in row: {row!r}")
 
@@ -267,4 +279,7 @@ class CSVAdapter:
             characteristic_id=characteristic_id,
             value=tag_value,
             timestamp=timestamp,
+            assignment_id=assignment_id,
+            prompt_id=prompt_id,
+            team_id=team_id,
         )
