@@ -112,6 +112,16 @@ class DBAdapter:
         questions_lookup: Dict[str, Mapping[str, Any]] = {}
         assignment_questionnaires_lookup: Dict[str, str] = {}
         assignment_questionnaires_by_assignment: Dict[str, str] = {}
+
+        total_assignments: Optional[int] = None
+        try:
+            total_assignments = len(rows)  # type: ignore[arg-type]
+        except TypeError:
+            pass
+        if total_assignments:
+            logger.info("Starting assignment ingestion for %d rows", total_assignments)
+        else:
+            logger.info("Starting assignment ingestion")
         if table_data:
             answers_rows = table_data.get("answers") or []
             for answer in answers_rows:
@@ -179,7 +189,7 @@ class DBAdapter:
         characteristic_meta: Dict[str, Dict[str, Any]] = {}
         tagger_meta: Dict[str, Dict[str, Any]] = {}
 
-        for row in rows:
+        for idx, row in enumerate(rows, 1):
             if row is None:
                 raise ValueError("Invalid assignment row: None")
 
@@ -243,6 +253,14 @@ class DBAdapter:
             assignments.append(assignment)
             assignments_by_comment[assignment.comment_id].append(assignment)
             assignments_by_tagger[assignment.tagger_id].append(assignment)
+
+            if idx % 1000 == 0:
+                if total_assignments:
+                    logger.info(
+                        "Processed %d/%d assignment rows", idx, total_assignments
+                    )
+                else:
+                    logger.info("Processed %d assignment rows", idx)
 
             comment_id = assignment.comment_id
             answer_row = answers_lookup.get(comment_id)
@@ -411,6 +429,12 @@ class DBAdapter:
             for key in ("team_id", "tagger_team", "tagger_meta"):
                 if key in row and row[key] is not None:
                     tagger_entry.setdefault(key, row[key])
+
+        logger.info(
+            "Finished assignment ingestion: built %d assignments across %d taggers",
+            len(assignments),
+            len(assignments_by_tagger),
+        )
 
         metadata = {
             "assignments_by_comment": assignments_by_comment,
