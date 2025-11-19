@@ -445,6 +445,55 @@ def test_db_adapter_uses_answer_id_for_comment_mapping():
     }
 
 
+def test_db_adapter_skips_rows_without_user_id(caplog):
+    caplog.set_level("INFO")
+
+    answers = [
+        {
+            "id": 555,
+            "question_id": 101,
+            "comments": "Answer body",
+        }
+    ]
+    questions = [
+        {
+            "id": 101,
+            "questionnaire_id": 303,
+            "text": "Question text",
+        }
+    ]
+    assignment_questionnaires = [
+        {
+            "assignment_id": 9001,
+            "questionnaire_id": 303,
+            # deliberately omit user_id to force skipping
+        }
+    ]
+    answer_tags = [
+        {
+            "id": 12,
+            "answer_id": 555,
+            "tag_prompt_deployment_id": 31,
+            "value": 1,
+            "created_at": datetime(2024, 5, 2, 9, 0, 0),
+        }
+    ]
+
+    adapter = _make_adapter(
+        {
+            "answer_tags": answer_tags,
+            "answers": answers,
+            "questions": questions,
+            "assignment_questionnaires": assignment_questionnaires,
+        }
+    )
+
+    domain_objects = adapter.read_domain_objects()
+
+    assert domain_objects["assignments"] == []
+    assert "Skipping assignment row with no user_id/tagger" in caplog.text
+
+
 def test_db_adapter_logs_invalid_rows(caplog):
     caplog.set_level("ERROR")
 

@@ -194,6 +194,8 @@ class DBAdapter:
             "missing": 0,
         }
 
+        skipped_missing_tagger = 0
+
         for idx, row in enumerate(rows, 1):
             if row is None:
                 raise ValueError("Invalid assignment row: None")
@@ -252,9 +254,12 @@ class DBAdapter:
                 if tagger_id_override in (None, ""):
                     tagger_id_override = questionnaire_user_id
                 if tagger_id_override in (None, ""):
-                    raise KeyError(
-                        f"Missing required columns ['tagger_id', 'worker_id', 'user_id'] in row {row!r}"
+                    skipped_missing_tagger += 1
+                    logger.warning(
+                        "Skipping assignment row with no user_id/tagger after questionnaire backfill: %r",
+                        row,
                     )
+                    continue
 
                 assignment = self._row_to_assignment(
                     row,
@@ -474,6 +479,12 @@ class DBAdapter:
             assignment_id_sources["row"],
             assignment_id_sources["missing"],
         )
+
+        if skipped_missing_tagger:
+            logger.info(
+                "Skipped %d assignment rows that did not include a user_id",
+                skipped_missing_tagger,
+            )
 
         if assignments:
             sample_assignment = assignments[0]
