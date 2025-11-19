@@ -11,6 +11,7 @@ from typing import Dict, List, Mapping, Sequence, Tuple, Optional
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
+from qcc.domain import enums
 from qcc.metrics.pattern_strategy import (
     HorizontalPatternDetection,
     VerticalPatternDetection,
@@ -134,12 +135,17 @@ class TaggerPerformanceReport:
         vertical_patterns: List[Dict[str, object]] = []
 
         for tagger in taggers:
+            assignments = self._eligible_yes_no_assignments(tagger.tagassignments or [])
             pattern_counts = horizontal_strategy.analyze(tagger)
             positive_patterns = {
                 pattern: count
                 for pattern, count in (pattern_counts or {}).items()
                 if count > 1 and len(pattern) > 1
             }
+            if not positive_patterns and assignments:
+                positive_patterns = self._short_sequence_pattern_counts(
+                    horizontal_strategy, assignments, tracked_patterns
+                )
 
             if positive_patterns:
                 horizontal_entry = {
@@ -151,7 +157,14 @@ class TaggerPerformanceReport:
             if characteristics:
                 aggregate_counts: Counter[str] = Counter()
                 for characteristic in characteristics:
+                    char_assignments = self._assignments_for_characteristic(
+                        assignments, characteristic.id
+                    )
                     char_counts = vertical_strategy.analyze(tagger, characteristic)
+                    if not char_counts and char_assignments:
+                        char_counts = self._short_sequence_pattern_counts(
+                            vertical_strategy, char_assignments, tracked_patterns
+                        )
                     if char_counts:
                         aggregate_counts.update(char_counts)
                 vertical_positive = {
@@ -237,6 +250,45 @@ class TaggerPerformanceReport:
             "strategy": metrics.strategy.__class__.__name__,
             "methods": list(methods),
             "per_characteristic": per_characteristic,
+        }
+
+    @staticmethod
+    def _eligible_yes_no_assignments(
+        assignments: Sequence[TagAssignment],
+    ) -> List[TagAssignment]:
+        filtered = [
+            assignment
+            for assignment in assignments
+            if getattr(assignment, "timestamp", None) is not None
+            and getattr(assignment, "value", None) in (enums.TagValue.YES, enums.TagValue.NO)
+        ]
+
+        return sorted(filtered, key=lambda assignment: assignment.timestamp)
+
+    @staticmethod
+    def _assignments_for_characteristic(
+        assignments: Sequence[TagAssignment], characteristic_id: object
+    ) -> List[TagAssignment]:
+        return [
+            assignment
+            for assignment in assignments
+            if getattr(assignment, "characteristic_id", None) == characteristic_id
+        ]
+
+    @staticmethod
+    def _short_sequence_pattern_counts(
+        strategy: HorizontalPatternDetection,
+        assignments: Sequence[TagAssignment],
+        tracked_patterns: Sequence[str],
+    ) -> Dict[str, int]:
+        sequence = strategy.build_sequence_str(assignments)
+        if not sequence:
+            return {}
+
+        return {
+            pattern: strategy.count_pattern_repetition(pattern, sequence)
+            for pattern in tracked_patterns
+            if len(pattern) > 1 and strategy.count_pattern_repetition(pattern, sequence) > 1
         }
 
     def _build_csv_rows(

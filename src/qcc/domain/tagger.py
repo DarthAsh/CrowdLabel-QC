@@ -226,7 +226,40 @@ class Tagger:
         # other_latest = latest_by_comment(other.tagassignments or [])
         # ... (rest of logic)
         # ------------------------------------------------------------------
-        raise NotImplementedError("agreement_with is deprecated; use AgreementStrategy")
+        def latest_by_comment(assignments: List[TagAssignment]) -> Dict[str, TagAssignment]:
+            latest: Dict[str, TagAssignment] = {}
+            for ta in assignments:
+                if ta.characteristic_id != characteristic.id:
+                    continue
+                if getattr(ta, "timestamp", None) is None:
+                    continue
+                if getattr(ta, "value", None) == TagValue.NA:
+                    continue
+                cur = latest.get(ta.comment_id)
+                if cur is None:
+                    latest[ta.comment_id] = ta
+                    continue
+                if ta.timestamp > cur.timestamp:
+                    latest[ta.comment_id] = ta
+                elif ta.timestamp == cur.timestamp and str(ta.value) > str(cur.value):
+                    latest[ta.comment_id] = ta
+            return latest
+
+        if not (self.tagassignments and other.tagassignments):
+            raise NotImplementedError("agreement_with requires assignments; use AgreementStrategy")
+
+        self_latest = latest_by_comment(self.tagassignments or [])
+        other_latest = latest_by_comment(other.tagassignments or [])
+        overlap = set(self_latest) & set(other_latest)
+        if not overlap:
+            return 0.0
+
+        matching = sum(
+            1
+            for comment_id in overlap
+            if self_latest[comment_id].value == other_latest[comment_id].value
+        )
+        return matching / len(overlap)
     
     def pattern_signals(self, characteristic: Characteristic) -> Dict[str, Any]:
         """Detect pattern signals for a specific characteristic.
@@ -262,5 +295,87 @@ class Tagger:
         # sorted_assignments = sorted(assignments_for_char, key=lambda ta: ta.timestamp)
         # tag_sequence = [ta.value for ta in sorted_assignments]
         # ... (rest of algorithm)
-        # ------------------------------------------------------------------
-        raise NotImplementedError("pattern_signals is deprecated; use PatternSignalsStrategy")
+        assignments_for_char = [
+            ta
+            for ta in (self.tagassignments or [])
+            if ta.characteristic_id == characteristic.id
+            and getattr(ta, "timestamp", None) is not None
+            and getattr(ta, "value", None) in (TagValue.YES, TagValue.NO)
+        ]
+        if not assignments_for_char:
+            raise NotImplementedError("pattern_signals requires assignments; use PatternSignalsStrategy")
+
+        sorted_assignments = sorted(assignments_for_char, key=lambda ta: ta.timestamp)
+        sequence = [ta.value for ta in sorted_assignments]
+
+        longest_run_len = 0
+        longest_run_value: Optional[TagValue] = None
+        current_len = 0
+        current_value: Optional[TagValue] = None
+        for value in sequence:
+            if value == current_value:
+                current_len += 1
+            else:
+                current_value = value
+                current_len = 1
+            if current_len > longest_run_len:
+                longest_run_len = current_len
+                longest_run_value = current_value
+
+        alternations = 0
+        for i in range(1, len(sequence)):
+            if sequence[i] != sequence[i - 1]:
+                alternations += 1
+        alternation_ratio = alternations / (len(sequence) - 1) if len(sequence) > 1 else 0.0
+
+        tokens = ["Y" if value == TagValue.YES else "N" for value in sequence]
+        ngram_counts: Dict[str, int] = {}
+        for i in range(len(tokens) - 2):
+            ngram = "".join(tokens[i : i + 3])
+            ngram_counts[ngram] = ngram_counts.get(ngram, 0) + 1
+
+        top_repeats = [
+            {"ngram": ngram, "count": count}
+            for ngram, count in sorted(ngram_counts.items(), key=lambda item: item[1], reverse=True)
+            if count > 1
+        ]
+
+        runs_summary: List[Dict[str, object]] = []
+        if longest_run_len >= LONG_RUN_THRESHOLD:
+            runs_summary.append(
+                {
+                    "type": "long_run",
+                    "length": longest_run_len,
+                    "value": longest_run_value,
+                }
+            )
+        if len(sequence) >= MIN_ALTERNATION_SEQUENCE and alternation_ratio >= ALTERNATION_RATIO_THRESHOLD:
+            runs_summary.append(
+                {
+                    "type": "alternation",
+                    "ratio": alternation_ratio,
+                    "transitions": alternations,
+                }
+            )
+        repeat_trigger = next(
+            (entry for entry in top_repeats if entry["count"] >= NGRAM_REPEAT_THRESHOLD),
+            None,
+        )
+        if repeat_trigger:
+            runs_summary.append(
+                {
+                    "type": "repeated_ngrams",
+                    "ngram": repeat_trigger["ngram"],
+                    "count": repeat_trigger["count"],
+                }
+            )
+
+        patterns_found = bool(runs_summary)
+
+        return {
+            "patterns_found": patterns_found,
+            "longest_run": {"length": longest_run_len, "value": longest_run_value},
+            "alternations": {"ratio": alternation_ratio, "count": alternations},
+            "runs_summary": runs_summary,
+            "top_repeats": top_repeats,
+        }
