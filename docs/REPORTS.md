@@ -11,6 +11,9 @@ written as timestamped files (e.g., `tagging-report-20240620-153045.csv`).
 pattern detection, and agreement (optional). The report accepts the full set of
 `Tagger` instances and the `TagAssignment` list they carry.
 
+For per-assignment visibility into pattern detection, see
+`PatternDetectionReport` below.
+
 ### Speed metrics
 
 Speed is calculated by the `LogTrimTaggingSpeed` strategy. For each tagger the
@@ -89,6 +92,63 @@ columnar CSV. Column prefixes indicate the source of each metric:
 Each row represents one tagger (`user_id`). Columns are added only when the
 corresponding metric exists in the summary payload, so the CSV remains compact
 for partial reports.
+
+## Assignment pattern detection report
+
+`PatternDetectionReport` produces assignment-level outputs for pattern detection
+so you can trace the signals back to individual assignments. It reuses the
+horizontal and vertical perspectives, but pattern detection always runs within
+each tagger's individual assignment (all answer tags sharing an
+`assignment_id`). In addition to the detected patterns, each assignment row
+reports what percentage of its timestamped YES/NO tags belong to a detected
+pattern window.
+
+The report returns a single entry for every tagger/assignment pair with
+metadata (`assignment_id`, `comment_id`, `prompt_id`, `timestamp`) plus the
+pattern(s) found when scanning that assignment's answer tags. Patterns are
+detected in 12-assignment windows using the same 3- and 4-token repeat logic as
+`TaggerPerformanceReport`.
+
+CSV exports include one row per assignment per perspective with a semicolon-
+delimited `patterns` column (empty when no patterns were detected) and a
+boolean `pattern_detected` column for quick filtering. Only `user_id`,
+`assignment_id`, `comment_id`, `prompt_id`, `timestamp`, `perspective`, and the
+pattern columns are emitted.
+
+### How patterns are detected and attached
+
+- **Input preparation:** For each tagger, assignments are grouped by
+  `assignment_id`. Within each group only timestamped YES/NO tags are kept,
+  sorted chronologically, and converted into token strings for scanning.
+- **Window scan:** Non-overlapping 12-assignment windows within the assignment
+  are inspected. A window is a hit only when its tokens are a perfect
+  repetition of the first four tokens (`abcdabcdabcd`) or first three tokens
+  (`abcabcabcabc`). Windows matching four-token repeats are masked before three-
+  token matching to avoid double-counting.
+- **Annotation:** When a window hits, the assignment is marked with the literal
+  repeated pattern (for example, `YYYY`, `NNNN`, or `YYNN`), and
+  `pattern_detected` is set to `true` for that tagger/assignment pair. An
+  assignment can accrue multiple pattern labels if multiple windows match.
+
+### CSV column reference
+
+- `user_id`, `assignment_id`, `comment_id`, `prompt_id` – identifiers copied
+  directly from the enriched `TagAssignment`.
+- `timestamp` – the earliest timestamp among the assignment's eligible tags.
+- `perspective` – either `horizontal` (full tagger sequence grouped by
+  assignment) or `vertical` (per characteristic, then merged per tagger, still
+  grouped by assignment).
+- `patterns` – semicolon-delimited list of patterns that hit within the
+  assignment for that perspective; empty when no pattern was detected for that
+  row.
+- `pattern_detected` – `true` when any pattern was found for that assignment and
+  perspective, else `false`.
+- `pattern_coverage` – percentage (0–100, rounded to two decimal places) of the
+  assignment's eligible tags that fell inside one or more detected pattern
+  windows.
+
+Use the CSV export to trace any flagged pattern back to the exact assignment and
+context that produced it.
 
 ## Characteristic reliability report
 
