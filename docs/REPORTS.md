@@ -96,45 +96,49 @@ for partial reports.
 ## Assignment pattern detection report
 
 `PatternDetectionReport` produces assignment-level outputs for pattern detection
-so you can trace the signals back to individual tags. It reuses the horizontal
-and vertical perspectives:
+so you can trace the signals back to individual assignments. It reuses the
+horizontal and vertical perspectives, but pattern detection always runs within
+each tagger's individual assignment (all answer tags sharing an
+`assignment_id`).
 
-* **horizontal** – Chronological across all assignments for a tagger.
-* **vertical** – Per characteristic, then merged per tagger.
-
-The report returns every timestamped YES/NO assignment with metadata
-(`assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`, `team_id`,
-`timestamp`). Each assignment lists the pattern(s) that include it. Patterns are
-detected in 12-assignment windows using the same 3- and 4-token repeat logic as
-`TaggerPerformanceReport`.
+The report returns every timestamped YES/NO tag inside each assignment with
+metadata (`assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`,
+`team_id`, `timestamp`) plus the pattern(s) found when scanning that assignment's
+answer tags. Patterns are detected in 12-assignment windows using the same 3-
+and 4-token repeat logic as `TaggerPerformanceReport`.
 
 CSV exports include one row per assignment per perspective with a semicolon-
-delimited `patterns` column (empty when no patterns were detected).
+delimited `patterns` column (empty when no patterns were detected) and a
+boolean `pattern_detected` column for quick filtering.
 
 ### How patterns are detected and attached
 
-- **Input preparation:** Each tagger contributes only timestamped YES/NO
-  assignments. They are sorted chronologically and converted into token strings
-  for scanning.
-- **Window scan:** Non-overlapping 12-assignment windows are inspected. A window
-  is a hit only when its tokens are a perfect repetition of the first four
-  tokens (`abcdabcdabcd`) or first three tokens (`abcabcabcabc`). Windows
-  matching four-token repeats are masked before three-token matching to avoid
-  double-counting.
-- **Annotation:** When a window hits, every assignment in that window is
+- **Input preparation:** For each tagger, assignments are grouped by
+  `assignment_id`. Within each group only timestamped YES/NO tags are kept,
+  sorted chronologically, and converted into token strings for scanning.
+- **Window scan:** Non-overlapping 12-assignment windows within the assignment
+  are inspected. A window is a hit only when its tokens are a perfect
+  repetition of the first four tokens (`abcdabcdabcd`) or first three tokens
+  (`abcabcabcabc`). Windows matching four-token repeats are masked before three-
+  token matching to avoid double-counting.
+- **Annotation:** When a window hits, every tag in that assignment window is
   annotated with the literal repeated pattern (for example, `YYYY`, `NNNN`, or
-  `YYNN`). Assignments can accrue multiple pattern labels if they appear in more
-  than one matching window across perspectives.
+  `YYNN`), and `pattern_detected` is set to `true`. Tags can accrue multiple
+  pattern labels if they appear in more than one matching window across
+  perspectives.
 
 ### CSV column reference
 
 - `user_id`, `assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`,
   `team_id` – identifiers copied directly from the enriched `TagAssignment`.
 - `timestamp` – the assignment's timestamp as ingested.
-- `perspective` – either `horizontal` (full tagger sequence) or `vertical`
-  (per characteristic, then merged per tagger).
+- `perspective` – either `horizontal` (full tagger sequence grouped by
+  assignment) or `vertical` (per characteristic, then merged per tagger, still
+  grouped by assignment).
 - `patterns` – semicolon-delimited list of patterns that include the assignment
   for that perspective; empty when no pattern was detected for that row.
+- `pattern_detected` – `true` when any pattern was found for that assignment and
+  perspective, else `false`.
 
 Use the CSV export to trace any flagged pattern back to the exact assignment and
 context that produced it.

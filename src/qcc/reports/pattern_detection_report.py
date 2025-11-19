@@ -68,6 +68,7 @@ class PatternDetectionReport:
             "timestamp",
             "perspective",
             "patterns",
+            "pattern_detected",
         ]
 
         with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
@@ -82,9 +83,15 @@ class PatternDetectionReport:
         per_assignment: List[Dict[str, object]] = []
 
         for tagger in taggers:
-            assignments = self._eligible_assignments(tagger.tagassignments or [])
-            windows = self._pattern_windows(assignments, strategy)
-            per_assignment.extend(self._assignment_entries(assignments, windows))
+            grouped = self._group_assignments_by_id(tagger.tagassignments or [])
+            for assignment_id, assignments in grouped.items():
+                eligible_assignments = self._eligible_assignments(assignments)
+                windows = self._pattern_windows(eligible_assignments, strategy)
+                per_assignment.extend(
+                    self._assignment_entries(
+                        eligible_assignments, windows, assignment_id=assignment_id
+                    )
+                )
 
         return per_assignment
 
@@ -103,18 +110,27 @@ class PatternDetectionReport:
 
             characteristic_entries: List[Dict[str, object]] = []
             for tagger in taggers:
-                assignments = self._eligible_assignments(
+                assignments = [
                     assignment
                     for assignment in (tagger.tagassignments or [])
                     if getattr(assignment, "characteristic_id", None) == characteristic_id
-                )
-                if not assignments:
-                    continue
+                ]
+                grouped = self._group_assignments_by_id(assignments)
+                for assignment_id, characteristic_assignments in grouped.items():
+                    eligible_assignments = self._eligible_assignments(
+                        characteristic_assignments
+                    )
+                    if not eligible_assignments:
+                        continue
 
-                windows = self._pattern_windows(assignments, strategy)
-                characteristic_entries.extend(
-                    self._assignment_entries(assignments, windows)
-                )
+                    windows = self._pattern_windows(eligible_assignments, strategy)
+                    characteristic_entries.extend(
+                        self._assignment_entries(
+                            eligible_assignments,
+                            windows,
+                            assignment_id=assignment_id,
+                        )
+                    )
 
             if characteristic_entries:
                 per_characteristic.append(
@@ -177,7 +193,11 @@ class PatternDetectionReport:
         return [*track_4, *track_3]
 
     def _assignment_entries(
-        self, assignments: Sequence[TagAssignment], windows: Sequence[tuple[int, str]]
+        self,
+        assignments: Sequence[TagAssignment],
+        windows: Sequence[tuple[int, str]],
+        *,
+        assignment_id: Optional[str],
     ) -> List[Dict[str, object]]:
         entries: List[Dict[str, object]] = []
 
@@ -185,13 +205,14 @@ class PatternDetectionReport:
             entries.append(
                 {
                     "tagger_id": str(assignment.tagger_id),
-                    "assignment_id": getattr(assignment, "assignment_id", None),
+                    "assignment_id": assignment_id,
                     "comment_id": getattr(assignment, "comment_id", None),
                     "characteristic_id": getattr(assignment, "characteristic_id", None),
                     "prompt_id": getattr(assignment, "prompt_id", None),
                     "team_id": getattr(assignment, "team_id", None),
                     "timestamp": self._timestamp_str(getattr(assignment, "timestamp", None)),
                     "patterns": [],
+                    "pattern_detected": False,
                 }
             )
 
@@ -201,6 +222,7 @@ class PatternDetectionReport:
                 if idx >= len(entries):
                     break
                 entries[idx]["patterns"].append(pattern)
+                entries[idx]["pattern_detected"] = True
 
         for entry in entries:
             patterns = entry.get("patterns", []) or []
@@ -211,6 +233,20 @@ class PatternDetectionReport:
                 entry["patterns"] = []
 
         return entries
+
+    @staticmethod
+    def _group_assignments_by_id(
+        assignments: Iterable[TagAssignment],
+    ) -> Dict[str, List[TagAssignment]]:
+        grouped: Dict[str, List[TagAssignment]] = {}
+        for assignment in assignments:
+            assignment_id = getattr(assignment, "assignment_id", None)
+            if assignment_id is None:
+                continue
+
+            grouped.setdefault(str(assignment_id), []).append(assignment)
+
+        return grouped
 
     def _build_csv_rows(self, report_data: Mapping[str, object]) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
@@ -266,6 +302,7 @@ class PatternDetectionReport:
                 "timestamp": str(assignment.get("timestamp", "") or ""),
                 "perspective": perspective,
                 "patterns": pattern_str,
+                "pattern_detected": str(bool(patterns)).lower(),
             }
 
             rows.append(dict(row))
