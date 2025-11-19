@@ -185,6 +185,13 @@ class DBAdapter:
         characteristic_meta: Dict[str, Dict[str, Any]] = {}
         tagger_meta: Dict[str, Dict[str, Any]] = {}
 
+        assignment_id_sources = {
+            "questionnaire": 0,
+            "deployment": 0,
+            "row": 0,
+            "missing": 0,
+        }
+
         for idx, row in enumerate(rows, 1):
             if row is None:
                 raise ValueError("Invalid assignment row: None")
@@ -219,10 +226,17 @@ class DBAdapter:
                     )
 
                 assignment_id_override = questionnaire_assignment_id
+                assignment_id_source = "questionnaire"
                 if assignment_id_override in (None, ""):
                     assignment_id_override = deployment_assignment_id
+                    assignment_id_source = "deployment"
                 if assignment_id_override in (None, ""):
                     assignment_id_override = parsed.assignment_id
+                    assignment_id_source = "row"
+                if assignment_id_override in (None, ""):
+                    assignment_id_source = "missing"
+
+                assignment_id_sources[assignment_id_source] += 1
 
                 tagger_id_override = parsed.tagger_id
                 if tagger_id_override in (None, ""):
@@ -440,6 +454,13 @@ class DBAdapter:
             "Finished assignment ingestion: built %d assignments across %d taggers",
             len(assignments),
             len(assignments_by_tagger),
+        )
+        logger.info(
+            "Assignment ID resolution sources — questionnaires: %d, deployments: %d, rows: %d, missing: %d",
+            assignment_id_sources["questionnaire"],
+            assignment_id_sources["deployment"],
+            assignment_id_sources["row"],
+            assignment_id_sources["missing"],
         )
 
         metadata = {
