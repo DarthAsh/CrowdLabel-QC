@@ -463,6 +463,69 @@ class DBAdapter:
             assignment_id_sources["missing"],
         )
 
+        if assignments:
+            sample_assignment = assignments[0]
+            comment_id = sample_assignment.comment_id
+            comment_entry = comment_meta.get(comment_id, {})
+
+            answer_row = answers_lookup.get(comment_id)
+            question_id: Optional[str] = None
+            questionnaire_id: Optional[str] = None
+            answer_payload = None
+            if answer_row:
+                question_id = self._extract_optional(answer_row, ["question_id", "questionId"])
+                questionnaire_id = self._extract_optional(
+                    answer_row, ["questionnaire_id", "questionnaireId"]
+                )
+                answer_payload = {
+                    "id": comment_id,
+                    "question_id": question_id,
+                    "questionnaire_id": questionnaire_id,
+                    "answer": self._extract_optional(
+                        answer_row, ["comments", "comment", "answer", "text", "body"]
+                    ),
+                    "value": self._extract_optional(answer_row, ["answer", "value"]),
+                }
+
+            if not question_id:
+                question_id = comment_entry.get("question_id")
+            if question_id and not questionnaire_id:
+                question_row = questions_lookup.get(str(question_id))
+                if question_row:
+                    questionnaire_id = self._extract_optional(
+                        question_row, ["questionnaire_id", "questionnaireId"]
+                    )
+            question_payload = None
+            if question_id:
+                question_row = questions_lookup.get(str(question_id))
+                if question_row:
+                    question_payload = {
+                        "id": str(question_id),
+                        "text": self._extract_optional(
+                            question_row, ["txt", "text", "question", "prompt"]
+                        ),
+                        "questionnaire_id": questionnaire_id,
+                        "type": question_row.get("type"),
+                    }
+
+            def _assignment_payload(assignment: TagAssignment) -> Dict[str, Any]:
+                return {
+                    "assignment_id": assignment.assignment_id,
+                    "comment_id": assignment.comment_id,
+                    "characteristic_id": assignment.characteristic_id,
+                    "tagger_id": assignment.tagger_id,
+                    "value": assignment.value.name if hasattr(assignment.value, "name") else assignment.value,
+                    "timestamp": assignment.timestamp,
+                }
+
+            logger.info(
+                "Sample assignment and related data: assignment=%s; answer=%s; question=%s; answer_tags=%s",
+                _assignment_payload(sample_assignment),
+                answer_payload,
+                question_payload,
+                [_assignment_payload(a) for a in assignments_by_comment.get(comment_id, [])],
+            )
+
         metadata = {
             "assignments_by_comment": assignments_by_comment,
             "assignments_by_tagger": assignments_by_tagger,
