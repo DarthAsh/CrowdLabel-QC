@@ -109,9 +109,10 @@ for partial reports.
 so you can trace the signals back to individual assignments. It reuses the
 horizontal and vertical perspectives, but pattern detection always runs within
 each tagger's individual assignment (all answer tags sharing an
-`assignment_id`). In addition to the detected patterns, each assignment row
-reports what percentage of its timestamped YES/NO tags belong to a detected
-pattern window.
+`assignment_id`). Only assignment `1205` is emitted in the report. In addition
+to the detected patterns, each assignment row reports what percentage of its
+timestamped YES/NO tags belong to a detected pattern window and the tagging
+speed metrics for that assignment.
 
 The report returns a single entry for every tagger/assignment pair with
 metadata (`assignment_id`, `comment_id`, `prompt_id`, `timestamp`) plus the
@@ -143,7 +144,8 @@ pattern columns are emitted.
 ### CSV column reference
 
 - `user_id`, `assignment_id`, `comment_id`, `prompt_id` – identifiers copied
-  directly from the enriched `TagAssignment`.
+  directly from the enriched `TagAssignment`. Only assignment `1205` rows are
+  written.
 - `timestamp` – the earliest timestamp among the assignment's eligible tags.
 - `perspective` – either `horizontal` (full tagger sequence grouped by
   assignment) or `vertical` (per characteristic, then merged per tagger, still
@@ -156,6 +158,9 @@ pattern columns are emitted.
 - `pattern_coverage` – percentage (0–100, rounded to two decimal places) of the
   assignment's eligible tags that fell inside one or more detected pattern
   windows.
+- `speed_mean_log2`, `speed_seconds_per_tag` – the log2-mean interval between
+  tags and its seconds-per-tag conversion, computed from the assignment's
+  eligible tags.
 
 Use the CSV export to trace any flagged pattern back to the exact assignment and
 context that produced it.

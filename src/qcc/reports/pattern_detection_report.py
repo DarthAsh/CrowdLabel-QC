@@ -11,6 +11,7 @@ from qcc.domain.characteristic import Characteristic
 from qcc.domain.enums import TagValue
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
+from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
 from qcc.metrics.pattern_strategy import (
     HorizontalPatternDetection,
     VerticalPatternDetection,
@@ -20,6 +21,8 @@ from qcc.metrics.interfaces import PatternSignalsStrategy
 
 class PatternDetectionReport:
     """Generate per-assignment pattern detection results."""
+
+    TARGET_ASSIGNMENT_ID = "1205"
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
@@ -68,6 +71,8 @@ class PatternDetectionReport:
             "patterns",
             "pattern_detected",
             "pattern_coverage",
+            "speed_mean_log2",
+            "speed_seconds_per_tag",
         ]
 
         with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
@@ -205,6 +210,7 @@ class PatternDetectionReport:
         timestamp = getattr(first, "timestamp", None)
         patterns = sorted({pattern for _, pattern in windows})
         coverage = self._pattern_coverage(assignments, windows)
+        mean_log2, seconds_per_tag = self._speed_metrics(assignments)
 
         return [
             {
@@ -216,17 +222,21 @@ class PatternDetectionReport:
                 "patterns": patterns,
                 "pattern_detected": bool(patterns),
                 "pattern_coverage": coverage,
+                "speed_mean_log2": mean_log2,
+                "speed_seconds_per_tag": seconds_per_tag,
             }
         ]
 
-    @staticmethod
     def _group_assignments_by_id(
-        assignments: Iterable[TagAssignment],
+        self, assignments: Iterable[TagAssignment]
     ) -> Dict[str, List[TagAssignment]]:
         grouped: Dict[str, List[TagAssignment]] = {}
         for assignment in assignments:
             assignment_id = getattr(assignment, "assignment_id", None)
             if assignment_id is None:
+                continue
+
+            if str(assignment_id) != self.TARGET_ASSIGNMENT_ID:
                 continue
 
             grouped.setdefault(str(assignment_id), []).append(assignment)
@@ -283,6 +293,10 @@ class PatternDetectionReport:
                 "patterns": pattern_str,
                 "pattern_detected": str(bool(patterns)).lower(),
                 "pattern_coverage": str(assignment.get("pattern_coverage", "") or ""),
+                "speed_mean_log2": str(assignment.get("speed_mean_log2", "") or ""),
+                "speed_seconds_per_tag": str(
+                    assignment.get("speed_seconds_per_tag", "") or ""
+                ),
             }
 
             rows.append(dict(row))
@@ -323,4 +337,15 @@ class PatternDetectionReport:
 
         coverage_ratio = len(covered_positions) / assignment_count
         return round(coverage_ratio * 100, 2)
+
+    @staticmethod
+    def _speed_metrics(assignments: Sequence[TagAssignment]) -> tuple[float, float]:
+        if not assignments:
+            return 0.0, 0.0
+
+        strategy = LogTrimTaggingSpeed()
+        tagger = Tagger(id="assignment-speed", tagassignments=list(assignments))
+        mean_log2 = strategy.speed_log2(tagger)
+        seconds = strategy.seconds_per_tag(mean_log2)
+        return round(mean_log2, 6), round(seconds, 6)
 

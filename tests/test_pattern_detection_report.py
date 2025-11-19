@@ -8,7 +8,7 @@ from qcc.domain.tagger import Tagger
 from qcc.reports.pattern_detection_report import PatternDetectionReport
 
 
-def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "assign-1") -> list[TagAssignment]:
+def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "1205") -> list[TagAssignment]:
     start = datetime(2024, 1, 1, 0, 0, 0)
     assignments = []
     for i in range(count):
@@ -37,8 +37,10 @@ def test_horizontal_assignments_capture_pattern_window():
     assert len(horizontal) == 1
     assert horizontal[0]["patterns"] == ["YYYY"]
     assert horizontal[0]["pattern_detected"] is True
-    assert horizontal[0]["assignment_id"] == "assign-1"
+    assert horizontal[0]["assignment_id"] == "1205"
     assert horizontal[0]["pattern_coverage"] == 100.0
+    assert horizontal[0]["speed_mean_log2"] == 0.0
+    assert horizontal[0]["speed_seconds_per_tag"] == 1.0
 
 
 def test_vertical_assignments_filtered_by_characteristic():
@@ -55,6 +57,7 @@ def test_vertical_assignments_filtered_by_characteristic():
     assert vertical["assignments"][0]["patterns"] == ["YYYY"]
     assert vertical["assignments"][0]["pattern_detected"] is True
     assert vertical["assignments"][0]["pattern_coverage"] == 100.0
+    assert vertical["assignments"][0]["speed_seconds_per_tag"] == 1.0
 
 
 def test_csv_export_writes_all_assignment_rows(tmp_path):
@@ -85,6 +88,8 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
         "patterns",
         "pattern_detected",
         "pattern_coverage",
+        "speed_mean_log2",
+        "speed_seconds_per_tag",
     }
 
 
@@ -100,10 +105,10 @@ def test_pattern_coverage_partial_window():
 
 
 def test_csv_rows_sorted_by_user_id(tmp_path):
-    assignments_a = _build_uniform_yes_assignments(assignment_id="assign-a")
+    assignments_a = _build_uniform_yes_assignments(assignment_id="1205")
     tagger_a = Tagger(id="user-1", tagassignments=assignments_a)
 
-    assignments_b = _build_uniform_yes_assignments(assignment_id="assign-b")
+    assignments_b = _build_uniform_yes_assignments(assignment_id="1205")
     tagger_b = Tagger(id="user-2", tagassignments=assignments_b)
 
     report = PatternDetectionReport(assignments_a + assignments_b)
@@ -117,3 +122,17 @@ def test_csv_rows_sorted_by_user_id(tmp_path):
 
     user_ids = [row["user_id"] for row in rows]
     assert user_ids == sorted(user_ids)
+
+
+def test_only_target_assignment_rows_emitted():
+    included = _build_uniform_yes_assignments(assignment_id="1205")
+    excluded = _build_uniform_yes_assignments(assignment_id="9999")
+
+    tagger = Tagger(id="user-1", tagassignments=included + excluded)
+    report = PatternDetectionReport(included + excluded)
+
+    data = report.generate_assignment_report([tagger], [])
+    horizontal = data["horizontal"]["assignments"]
+
+    assert len(horizontal) == 1
+    assert horizontal[0]["assignment_id"] == "1205"
