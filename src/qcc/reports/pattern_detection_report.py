@@ -62,9 +62,7 @@ class PatternDetectionReport:
             "user_id",
             "assignment_id",
             "comment_id",
-            "characteristic_id",
             "prompt_id",
-            "team_id",
             "timestamp",
             "perspective",
             "patterns",
@@ -199,40 +197,24 @@ class PatternDetectionReport:
         *,
         assignment_id: Optional[str],
     ) -> List[Dict[str, object]]:
-        entries: List[Dict[str, object]] = []
+        if not assignments:
+            return []
 
-        for assignment in assignments:
-            entries.append(
-                {
-                    "tagger_id": str(assignment.tagger_id),
-                    "assignment_id": assignment_id,
-                    "comment_id": getattr(assignment, "comment_id", None),
-                    "characteristic_id": getattr(assignment, "characteristic_id", None),
-                    "prompt_id": getattr(assignment, "prompt_id", None),
-                    "team_id": getattr(assignment, "team_id", None),
-                    "timestamp": self._timestamp_str(getattr(assignment, "timestamp", None)),
-                    "patterns": [],
-                    "pattern_detected": False,
-                }
-            )
+        first = assignments[0]
+        timestamp = getattr(first, "timestamp", None)
+        patterns = sorted({pattern for _, pattern in windows})
 
-        for start_pos, pattern in windows:
-            for offset in range(12):
-                idx = start_pos + offset
-                if idx >= len(entries):
-                    break
-                entries[idx]["patterns"].append(pattern)
-                entries[idx]["pattern_detected"] = True
-
-        for entry in entries:
-            patterns = entry.get("patterns", []) or []
-            if patterns:
-                unique_patterns = sorted({str(pattern) for pattern in patterns})
-                entry["patterns"] = unique_patterns
-            else:
-                entry["patterns"] = []
-
-        return entries
+        return [
+            {
+                "tagger_id": str(first.tagger_id),
+                "assignment_id": assignment_id,
+                "comment_id": getattr(first, "comment_id", None),
+                "prompt_id": getattr(first, "prompt_id", None),
+                "timestamp": self._timestamp_str(timestamp),
+                "patterns": patterns,
+                "pattern_detected": bool(patterns),
+            }
+        ]
 
     @staticmethod
     def _group_assignments_by_id(
@@ -292,13 +274,7 @@ class PatternDetectionReport:
                 "user_id": str(assignment.get("tagger_id", "")),
                 "assignment_id": str(assignment.get("assignment_id", "") or ""),
                 "comment_id": str(assignment.get("comment_id", "") or ""),
-                "characteristic_id": str(
-                    characteristic_id
-                    if characteristic_id is not None
-                    else assignment.get("characteristic_id", "")
-                ),
                 "prompt_id": str(assignment.get("prompt_id", "") or ""),
-                "team_id": str(assignment.get("team_id", "") or ""),
                 "timestamp": str(assignment.get("timestamp", "") or ""),
                 "perspective": perspective,
                 "patterns": pattern_str,

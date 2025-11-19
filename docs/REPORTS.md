@@ -101,15 +101,17 @@ horizontal and vertical perspectives, but pattern detection always runs within
 each tagger's individual assignment (all answer tags sharing an
 `assignment_id`).
 
-The report returns every timestamped YES/NO tag inside each assignment with
-metadata (`assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`,
-`team_id`, `timestamp`) plus the pattern(s) found when scanning that assignment's
-answer tags. Patterns are detected in 12-assignment windows using the same 3-
-and 4-token repeat logic as `TaggerPerformanceReport`.
+The report returns a single entry for every tagger/assignment pair with
+metadata (`assignment_id`, `comment_id`, `prompt_id`, `timestamp`) plus the
+pattern(s) found when scanning that assignment's answer tags. Patterns are
+detected in 12-assignment windows using the same 3- and 4-token repeat logic as
+`TaggerPerformanceReport`.
 
 CSV exports include one row per assignment per perspective with a semicolon-
 delimited `patterns` column (empty when no patterns were detected) and a
-boolean `pattern_detected` column for quick filtering.
+boolean `pattern_detected` column for quick filtering. Only `user_id`,
+`assignment_id`, `comment_id`, `prompt_id`, `timestamp`, `perspective`, and the
+pattern columns are emitted.
 
 ### How patterns are detected and attached
 
@@ -121,22 +123,22 @@ boolean `pattern_detected` column for quick filtering.
   repetition of the first four tokens (`abcdabcdabcd`) or first three tokens
   (`abcabcabcabc`). Windows matching four-token repeats are masked before three-
   token matching to avoid double-counting.
-- **Annotation:** When a window hits, every tag in that assignment window is
-  annotated with the literal repeated pattern (for example, `YYYY`, `NNNN`, or
-  `YYNN`), and `pattern_detected` is set to `true`. Tags can accrue multiple
-  pattern labels if they appear in more than one matching window across
-  perspectives.
+- **Annotation:** When a window hits, the assignment is marked with the literal
+  repeated pattern (for example, `YYYY`, `NNNN`, or `YYNN`), and
+  `pattern_detected` is set to `true` for that tagger/assignment pair. An
+  assignment can accrue multiple pattern labels if multiple windows match.
 
 ### CSV column reference
 
-- `user_id`, `assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`,
-  `team_id` – identifiers copied directly from the enriched `TagAssignment`.
-- `timestamp` – the assignment's timestamp as ingested.
+- `user_id`, `assignment_id`, `comment_id`, `prompt_id` – identifiers copied
+  directly from the enriched `TagAssignment`.
+- `timestamp` – the earliest timestamp among the assignment's eligible tags.
 - `perspective` – either `horizontal` (full tagger sequence grouped by
   assignment) or `vertical` (per characteristic, then merged per tagger, still
   grouped by assignment).
-- `patterns` – semicolon-delimited list of patterns that include the assignment
-  for that perspective; empty when no pattern was detected for that row.
+- `patterns` – semicolon-delimited list of patterns that hit within the
+  assignment for that perspective; empty when no pattern was detected for that
+  row.
 - `pattern_detected` – `true` when any pattern was found for that assignment and
   perspective, else `false`.
 
