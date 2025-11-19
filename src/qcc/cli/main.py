@@ -17,6 +17,7 @@ from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.io.csv_adapter import CSVAdapter
 from qcc.io.db_adapter import DBAdapter
 from qcc.reports.tagger_performance import TaggerPerformanceReport
+from qcc.reports.pattern_detection_report import PatternDetectionReport
 
 
 def main() -> int:
@@ -304,12 +305,21 @@ def run_analysis(
     csv_path = _timestamped_tagging_report_csv_path(output_dir)
     report.export_to_csv(summary, csv_path)
 
+    pattern_report = PatternDetectionReport(assignments)
+    assignment_patterns = pattern_report.generate_assignment_report(
+        taggers, characteristics
+    )
+    pattern_csv_path = _timestamped_pattern_report_csv_path(output_dir)
+    pattern_report.export_to_csv(assignment_patterns, pattern_csv_path)
+
     result = {
         "input_source": input_source,
         "output_directory": str(output_dir),
         "config": config.dict(),
         "summary": summary,
         "tagging_report_csv_path": str(csv_path),
+        "assignment_pattern_report": assignment_patterns,
+        "assignment_pattern_csv_path": str(pattern_csv_path),
     }
 
     return result
@@ -333,6 +343,12 @@ def write_summary(result: dict, output_dir: Path) -> None:
         csv_path = _resolve_tagging_report_csv_path(result, output_dir)
         report.export_to_csv(summary_data, csv_path)
 
+    pattern_data = result.get("assignment_pattern_report") if isinstance(result, dict) else None
+    if isinstance(pattern_data, Mapping):
+        pattern_report = PatternDetectionReport([])
+        csv_path = _resolve_pattern_report_csv_path(result, output_dir)
+        pattern_report.export_to_csv(pattern_data, csv_path)
+
 
 def _resolve_tagging_report_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
     csv_path = None
@@ -344,9 +360,24 @@ def _resolve_tagging_report_csv_path(result: Mapping[str, object], output_dir: P
     return _timestamped_tagging_report_csv_path(output_dir)
 
 
+def _resolve_pattern_report_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
+    csv_path = None
+    if isinstance(result, Mapping):
+        csv_path = result.get("assignment_pattern_csv_path")
+    if isinstance(csv_path, str) and csv_path:
+        return Path(csv_path)
+
+    return _timestamped_pattern_report_csv_path(output_dir)
+
+
 def _timestamped_tagging_report_csv_path(output_dir: Path) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return output_dir / f"tagging-report-{timestamp}.csv"
+
+
+def _timestamped_pattern_report_csv_path(output_dir: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return output_dir / f"pattern-detections-{timestamp}.csv"
 
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig
