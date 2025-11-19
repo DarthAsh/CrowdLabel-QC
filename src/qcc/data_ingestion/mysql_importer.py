@@ -14,6 +14,7 @@ DEFAULT_TAG_PROMPT_TABLES: Sequence[str] = (
     "tag_prompt_deployments",
     "tag_prompts",
     "questions",
+    "assignment_questionnaires",
 )
 
 

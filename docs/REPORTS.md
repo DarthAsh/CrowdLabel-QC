@@ -11,6 +11,9 @@ written as timestamped files (e.g., `tagging-report-20240620-153045.csv`).
 pattern detection, and agreement (optional). The report accepts the full set of
 `Tagger` instances and the `TagAssignment` list they carry.
 
+For per-assignment visibility into pattern detection, see
+`PatternDetectionReport` below.
+
 ### Speed metrics
 
 Speed is calculated by the `LogTrimTaggingSpeed` strategy. For each tagger the
@@ -89,6 +92,52 @@ columnar CSV. Column prefixes indicate the source of each metric:
 Each row represents one tagger (`user_id`). Columns are added only when the
 corresponding metric exists in the summary payload, so the CSV remains compact
 for partial reports.
+
+## Assignment pattern detection report
+
+`PatternDetectionReport` produces assignment-level outputs for pattern detection
+so you can trace the signals back to individual tags. It reuses the horizontal
+and vertical perspectives:
+
+* **horizontal** – Chronological across all assignments for a tagger.
+* **vertical** – Per characteristic, then merged per tagger.
+
+The report returns every timestamped YES/NO assignment with metadata
+(`assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`, `team_id`,
+`timestamp`). Each assignment lists the pattern(s) that include it. Patterns are
+detected in 12-assignment windows using the same 3- and 4-token repeat logic as
+`TaggerPerformanceReport`.
+
+CSV exports include one row per assignment per perspective with a semicolon-
+delimited `patterns` column (empty when no patterns were detected).
+
+### How patterns are detected and attached
+
+- **Input preparation:** Each tagger contributes only timestamped YES/NO
+  assignments. They are sorted chronologically and converted into token strings
+  for scanning.
+- **Window scan:** Non-overlapping 12-assignment windows are inspected. A window
+  is a hit only when its tokens are a perfect repetition of the first four
+  tokens (`abcdabcdabcd`) or first three tokens (`abcabcabcabc`). Windows
+  matching four-token repeats are masked before three-token matching to avoid
+  double-counting.
+- **Annotation:** When a window hits, every assignment in that window is
+  annotated with the literal repeated pattern (for example, `YYYY`, `NNNN`, or
+  `YYNN`). Assignments can accrue multiple pattern labels if they appear in more
+  than one matching window across perspectives.
+
+### CSV column reference
+
+- `user_id`, `assignment_id`, `comment_id`, `characteristic_id`, `prompt_id`,
+  `team_id` – identifiers copied directly from the enriched `TagAssignment`.
+- `timestamp` – the assignment's timestamp as ingested.
+- `perspective` – either `horizontal` (full tagger sequence) or `vertical`
+  (per characteristic, then merged per tagger).
+- `patterns` – semicolon-delimited list of patterns that include the assignment
+  for that perspective; empty when no pattern was detected for that row.
+
+Use the CSV export to trace any flagged pattern back to the exact assignment and
+context that produced it.
 
 ## Characteristic reliability report
 
