@@ -68,6 +68,9 @@ class PatternDetectionReport:
             "prompt_id",
             "timestamp",
             "perspective",
+            "tag_count",
+            "pattern_tag_count",
+            "answer_count",
             "patterns",
             "pattern_detected",
             "pattern_coverage",
@@ -209,8 +212,18 @@ class PatternDetectionReport:
         first = assignments[0]
         timestamp = getattr(first, "timestamp", None)
         patterns = sorted({pattern for _, pattern in windows})
-        coverage = self._pattern_coverage(assignments, windows)
+        coverage, pattern_tag_count = self._pattern_coverage_stats(
+            assignments, windows
+        )
         mean_log2, seconds_per_tag = self._speed_metrics(assignments)
+        tag_count = len(assignments)
+        answer_count = len(
+            {
+                getattr(assignment, "comment_id", None)
+                for assignment in assignments
+                if getattr(assignment, "comment_id", None) is not None
+            }
+        )
 
         return [
             {
@@ -219,6 +232,9 @@ class PatternDetectionReport:
                 "comment_id": getattr(first, "comment_id", None),
                 "prompt_id": getattr(first, "prompt_id", None),
                 "timestamp": self._timestamp_str(timestamp),
+                "tag_count": tag_count,
+                "pattern_tag_count": pattern_tag_count,
+                "answer_count": answer_count,
                 "patterns": patterns,
                 "pattern_detected": bool(patterns),
                 "pattern_coverage": coverage,
@@ -290,6 +306,11 @@ class PatternDetectionReport:
                 "prompt_id": str(assignment.get("prompt_id", "") or ""),
                 "timestamp": str(assignment.get("timestamp", "") or ""),
                 "perspective": perspective,
+                "tag_count": str(assignment.get("tag_count", "") or ""),
+                "pattern_tag_count": str(
+                    assignment.get("pattern_tag_count", "") or ""
+                ),
+                "answer_count": str(assignment.get("answer_count", "") or ""),
                 "patterns": pattern_str,
                 "pattern_detected": str(bool(patterns)).lower(),
                 "pattern_coverage": str(assignment.get("pattern_coverage", "") or ""),
@@ -322,21 +343,22 @@ class PatternDetectionReport:
         return timestamp.isoformat() if isinstance(timestamp, datetime) else ""
 
     @staticmethod
-    def _pattern_coverage(
+    def _pattern_coverage_stats(
         assignments: Sequence[TagAssignment],
         windows: Sequence[tuple[int, str]],
         substring_length: int = 12,
-    ) -> float:
+    ) -> tuple[float, int]:
         assignment_count = len(assignments)
         if assignment_count == 0 or not windows:
-            return 0.0
+            return 0.0, 0
 
         covered_positions = set()
         for start, _ in windows:
             covered_positions.update(range(start, start + substring_length))
 
-        coverage_ratio = len(covered_positions) / assignment_count
-        return round(coverage_ratio * 100, 2)
+        pattern_tag_count = min(len(covered_positions), assignment_count)
+        coverage_ratio = pattern_tag_count / assignment_count
+        return round(coverage_ratio * 100, 2), pattern_tag_count
 
     @staticmethod
     def _speed_metrics(assignments: Sequence[TagAssignment]) -> tuple[float, float]:

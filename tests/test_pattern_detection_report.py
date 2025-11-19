@@ -39,6 +39,9 @@ def test_horizontal_assignments_capture_pattern_window():
     assert horizontal[0]["pattern_detected"] is True
     assert horizontal[0]["assignment_id"] == "1205"
     assert horizontal[0]["pattern_coverage"] == 100.0
+    assert horizontal[0]["tag_count"] == 12
+    assert horizontal[0]["pattern_tag_count"] == 12
+    assert horizontal[0]["answer_count"] == 12
     assert horizontal[0]["speed_mean_log2"] == 0.0
     assert horizontal[0]["speed_seconds_per_tag"] == 1.0
 
@@ -57,6 +60,9 @@ def test_vertical_assignments_filtered_by_characteristic():
     assert vertical["assignments"][0]["patterns"] == ["YYYY"]
     assert vertical["assignments"][0]["pattern_detected"] is True
     assert vertical["assignments"][0]["pattern_coverage"] == 100.0
+    assert vertical["assignments"][0]["tag_count"] == 12
+    assert vertical["assignments"][0]["pattern_tag_count"] == 12
+    assert vertical["assignments"][0]["answer_count"] == 12
     assert vertical["assignments"][0]["speed_seconds_per_tag"] == 1.0
 
 
@@ -85,6 +91,9 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
         "prompt_id",
         "timestamp",
         "perspective",
+        "tag_count",
+        "pattern_tag_count",
+        "answer_count",
         "patterns",
         "pattern_detected",
         "pattern_coverage",
@@ -100,8 +109,12 @@ def test_pattern_coverage_partial_window():
 
     data = report.generate_assignment_report([tagger], [])
     coverage = data["horizontal"]["assignments"][0]["pattern_coverage"]
+    pattern_tag_count = data["horizontal"]["assignments"][0]["pattern_tag_count"]
+    tag_count = data["horizontal"]["assignments"][0]["tag_count"]
 
     assert coverage == 66.67
+    assert pattern_tag_count == 12
+    assert tag_count == 18
 
 
 def test_csv_rows_sorted_by_user_id(tmp_path):

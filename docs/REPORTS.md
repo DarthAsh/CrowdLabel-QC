@@ -111,8 +111,9 @@ horizontal and vertical perspectives, but pattern detection always runs within
 each tagger's individual assignment (all answer tags sharing an
 `assignment_id`). Only assignment `1205` is emitted in the report. In addition
 to the detected patterns, each assignment row reports what percentage of its
-timestamped YES/NO tags belong to a detected pattern window and the tagging
-speed metrics for that assignment.
+timestamped YES/NO tags belong to a detected pattern window, how many tags land
+inside patterns, the total tags examined, how many answers were tagged in the
+assignment, and the tagging speed metrics for that assignment.
 
 The report returns a single entry for every tagger/assignment pair with
 metadata (`assignment_id`, `comment_id`, `prompt_id`, `timestamp`) plus the
@@ -123,8 +124,8 @@ detected in 12-assignment windows using the same 3- and 4-token repeat logic as
 CSV exports include one row per assignment per perspective with a semicolon-
 delimited `patterns` column (empty when no patterns were detected) and a
 boolean `pattern_detected` column for quick filtering. Only `user_id`,
-`assignment_id`, `comment_id`, `prompt_id`, `timestamp`, `perspective`, and the
-pattern columns are emitted.
+`assignment_id`, `comment_id`, `prompt_id`, `timestamp`, `perspective`, tag and
+answer counts, and the pattern/speed columns are emitted.
 
 ### How patterns are detected and attached
 
@@ -150,6 +151,12 @@ pattern columns are emitted.
 - `perspective` – either `horizontal` (full tagger sequence grouped by
   assignment) or `vertical` (per characteristic, then merged per tagger, still
   grouped by assignment).
+- `tag_count` – number of eligible timestamped YES/NO tags examined for the
+  user/assignment pair.
+- `pattern_tag_count` – count of those eligible tags that fell within at least
+  one detected pattern window.
+- `answer_count` – number of distinct answers (comment IDs) tagged by the user
+  for the assignment.
 - `patterns` – semicolon-delimited list of patterns that hit within the
   assignment for that perspective; empty when no pattern was detected for that
   row.
