@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
@@ -17,6 +18,8 @@ from qcc.metrics.pattern_strategy import (
     VerticalPatternDetection,
 )
 from qcc.metrics.interfaces import PatternSignalsStrategy
+
+logger = logging.getLogger(__name__)
 
 
 class PatternDetectionReport:
@@ -34,6 +37,12 @@ class PatternDetectionReport:
     ) -> Dict[str, object]:
         """Return pattern detection results for every assignment a user tagged."""
 
+        logger.info(
+            "Starting pattern detection report generation for %s taggers and %s characteristics",
+            len(taggers),
+            len(characteristics),
+        )
+
         horizontal_strategy = HorizontalPatternDetection()
         vertical_strategy = VerticalPatternDetection()
 
@@ -42,6 +51,12 @@ class PatternDetectionReport:
         )
         vertical_assignments = self._build_vertical_results(
             taggers, characteristics, vertical_strategy
+        )
+
+        logger.info(
+            "Finished pattern detection aggregation: %s horizontal rows, %s vertical characteristic groups",
+            len(horizontal_assignments),
+            len(vertical_assignments),
         )
 
         return {
@@ -84,12 +99,21 @@ class PatternDetectionReport:
             for row in rows:
                 writer.writerow(row)
 
+        logger.info(
+            "Pattern detection CSV written to %s with %s rows", csv_path, len(rows)
+        )
+
     def _build_horizontal_results(
         self, taggers: Sequence[Tagger], strategy: PatternSignalsStrategy
     ) -> List[Dict[str, object]]:
         per_assignment: List[Dict[str, object]] = []
 
         for tagger in sorted(taggers, key=lambda t: str(getattr(t, "id", ""))):
+            logger.debug(
+                "Processing horizontal assignments for user %s (%s assignments)",
+                getattr(tagger, "id", ""),
+                len(tagger.tagassignments or []),
+            )
             grouped = self._group_assignments_by_id(tagger.tagassignments or [])
             for assignment_id, assignments in grouped.items():
                 eligible_assignments = self._eligible_assignments(assignments)
@@ -125,6 +149,13 @@ class PatternDetectionReport:
                     for assignment in (tagger.tagassignments or [])
                     if getattr(assignment, "characteristic_id", None) == characteristic_id
                 ]
+                if assignments:
+                    logger.debug(
+                        "Processing vertical assignments for user %s characteristic %s (%s assignments)",
+                        getattr(tagger, "id", ""),
+                        characteristic_id,
+                        len(assignments),
+                    )
                 grouped = self._group_assignments_by_id(assignments)
                 for assignment_id, characteristic_assignments in grouped.items():
                     eligible_assignments = self._eligible_assignments(
@@ -252,9 +283,18 @@ class PatternDetectionReport:
         for assignment in assignments:
             assignment_id = getattr(assignment, "assignment_id", None)
             if assignment_id is None:
+                logger.warning(
+                    "Skipping assignment without assignment_id: %s",
+                    self._assignment_context(assignment),
+                )
                 continue
 
             if str(assignment_id) != self.TARGET_ASSIGNMENT_ID:
+                logger.debug(
+                    "Ignoring assignment outside target %s: %s",
+                    self.TARGET_ASSIGNMENT_ID,
+                    self._assignment_context(assignment, assignment_id),
+                )
                 continue
 
             grouped.setdefault(str(assignment_id), []).append(assignment)
@@ -273,6 +313,9 @@ class PatternDetectionReport:
             ):
                 key = (row.get("user_id", ""), row.get("assignment_id", ""), "horizontal")
                 if key in seen_keys:
+                    logger.debug(
+                        "Skipping duplicate horizontal row for %s", key
+                    )
                     continue
                 seen_keys.add(key)
                 rows.append(row)
@@ -291,6 +334,9 @@ class PatternDetectionReport:
                 ):
                     key = (row.get("user_id", ""), row.get("assignment_id", ""), "vertical")
                     if key in seen_keys:
+                        logger.debug(
+                            "Skipping duplicate vertical row for %s", key
+                        )
                         continue
                     seen_keys.add(key)
                     rows.append(row)
@@ -307,6 +353,9 @@ class PatternDetectionReport:
         rows: List[Dict[str, str]] = []
         for assignment in assignments:
             if not isinstance(assignment, Mapping):
+                logger.warning(
+                    "Skipping non-mapping assignment entry: %s", assignment
+                )
                 continue
             patterns = assignment.get("patterns", []) or []
             pattern_str = ";".join(patterns) if patterns else ""
@@ -331,6 +380,13 @@ class PatternDetectionReport:
                 ),
             }
 
+            if not row["user_id"] or not row["assignment_id"]:
+                logger.warning(
+                    "Skipping row missing required identifiers user_id/assignment_id: %s",
+                    row,
+                )
+                continue
+
             rows.append(dict(row))
 
         return rows
@@ -344,6 +400,10 @@ class PatternDetectionReport:
             timestamp = getattr(assignment, "timestamp", None)
             value = getattr(assignment, "value", None)
             if timestamp is None or value not in (TagValue.YES, TagValue.NO):
+                logger.debug(
+                    "Skipping ineligible assignment for pattern detection: %s",
+                    self._assignment_context(assignment),
+                )
                 continue
             eligible.append(assignment)
 
@@ -381,4 +441,17 @@ class PatternDetectionReport:
         mean_log2 = strategy.speed_log2(tagger)
         seconds = strategy.seconds_per_tag(mean_log2)
         return round(mean_log2, 6), round(seconds, 6)
+
+    @staticmethod
+    def _assignment_context(
+        assignment: TagAssignment, assignment_id: Optional[str] = None
+    ) -> Dict[str, object]:
+        return {
+            "user_id": getattr(assignment, "tagger_id", None),
+            "assignment_id": assignment_id
+            if assignment_id is not None
+            else getattr(assignment, "assignment_id", None),
+            "comment_id": getattr(assignment, "comment_id", None),
+            "characteristic_id": getattr(assignment, "characteristic_id", None),
+        }
 
