@@ -139,9 +139,11 @@ class DBAdapter:
     ) -> Mapping[str, List[Mapping[str, Any]]]:
         """Import tables by iterating questionnaires first and filtering dependents."""
 
+        logger.info("Importing assignment_questionnaires with limit=%s", limit)
         questionnaire_rows = self._importer.fetch_table(
             "assignment_questionnaires", limit=limit
         )
+        logger.info("Fetched %d assignment_questionnaire rows", len(questionnaire_rows))
         questionnaire_ids = {
             str(qid)
             for row in questionnaire_rows
@@ -149,6 +151,7 @@ class DBAdapter:
             not in (None, "")
         }
 
+        logger.info("Importing questions for %d questionnaires", len(questionnaire_ids))
         questions_rows = self._importer.fetch_table("questions")
         questions_filtered = [
             row
@@ -165,6 +168,7 @@ class DBAdapter:
             not in (None, "")
         }
 
+        logger.info("Importing answers for %d questions", len(question_ids))
         answers_rows = self._importer.fetch_table("answers")
         answers_filtered = [
             row
@@ -179,6 +183,7 @@ class DBAdapter:
             not in (None, "")
         }
 
+        logger.info("Importing assignments for %d answers", len(answer_ids))
         assignment_rows = self._importer.fetch_table(self.assignments_table)
         assignments_filtered = []
         for row in assignment_rows:
@@ -188,6 +193,13 @@ class DBAdapter:
             if str(comment_id) in answer_ids:
                 assignments_filtered.append(row)
 
+        logger.info(
+            "Filtered %d/%d assignments linked to questionnaire answers",
+            len(assignments_filtered),
+            len(assignment_rows),
+        )
+
+        logger.info("Importing tag_prompt_deployments for %d questions", len(question_ids))
         deployments_rows = self._importer.fetch_table("tag_prompt_deployments")
         deployments_filtered = [
             row
@@ -204,6 +216,9 @@ class DBAdapter:
             if (pid := self._extract_optional(row, ["tag_prompt_id", "tagPromptId"]))
             not in (None, "")
         }
+        logger.info(
+            "Importing tag_prompts for %d deployments", len(deployments_filtered)
+        )
         prompts_rows = self._importer.fetch_table("tag_prompts")
         prompts_filtered = [
             row
@@ -211,6 +226,16 @@ class DBAdapter:
             if str(self._extract_optional(row, ["id", "tag_prompt_id", "tagPromptId"]))
             in prompt_ids
         ]
+
+        logger.info(
+            "Questionnaire-root import complete: %d questionnaires, %d questions, %d answers, %d assignments, %d deployments, %d prompts",
+            len(questionnaire_rows),
+            len(questions_filtered),
+            len(answers_filtered),
+            len(assignments_filtered),
+            len(deployments_filtered),
+            len(prompts_filtered),
+        )
 
         return {
             "assignment_questionnaires": questionnaire_rows,
