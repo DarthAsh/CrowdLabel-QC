@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
 import csv
+import logging
+
+import pytest
 
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.enums import TagValue
@@ -194,3 +197,32 @@ def test_only_target_assignment_rows_emitted():
 
     assert len(horizontal) == 1
     assert horizontal[0]["assignment_id"] == "1205"
+
+
+def test_ineligible_assignments_skipped_with_logging(caplog):
+    allowed = TagAssignment(
+        tagger_id="worker-1",
+        comment_id="comment-eligible",
+        characteristic_id="char-1",
+        value=TagValue.YES,
+        timestamp=datetime(2024, 1, 1, 0, 0, 0),
+        assignment_id="1205",
+    )
+    rejected = TagAssignment(
+        tagger_id="worker-2",
+        comment_id="comment-ineligible",
+        characteristic_id="char-1",
+        value=TagValue.NA,
+        timestamp=datetime(2024, 1, 1, 0, 0, 1),
+        assignment_id="1205",
+    )
+
+    report = PatternDetectionReport([allowed, rejected])
+
+    with caplog.at_level(logging.DEBUG):
+        eligible = report._eligible_assignments([rejected, allowed])
+
+    assert eligible == [allowed]
+    assert any(
+        "Skipping ineligible assignment" in record.message for record in caplog.records
+    )

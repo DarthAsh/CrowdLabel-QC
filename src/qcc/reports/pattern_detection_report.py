@@ -391,9 +391,9 @@ class PatternDetectionReport:
 
         return rows
 
-    @staticmethod
+    @classmethod
     def _eligible_assignments(
-        assignments: Iterable[TagAssignment],
+        cls, assignments: Iterable[TagAssignment],
     ) -> List[TagAssignment]:
         eligible: List[TagAssignment] = []
         for assignment in assignments:
@@ -402,7 +402,7 @@ class PatternDetectionReport:
             if timestamp is None or value not in (TagValue.YES, TagValue.NO):
                 logger.debug(
                     "Skipping ineligible assignment for pattern detection: %s",
-                    self._assignment_context(assignment),
+                    cls._assignment_context(assignment),
                 )
                 continue
             eligible.append(assignment)
