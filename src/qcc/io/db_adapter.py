@@ -143,7 +143,18 @@ class DBAdapter:
         questionnaire_rows = self._importer.fetch_table(
             "assignment_questionnaires", limit=limit
         )
-        logger.info("Fetched %d assignment_questionnaire rows", len(questionnaire_rows))
+        questionnaire_rows = [
+            row
+            for row in questionnaire_rows
+            if str(
+                self._extract_optional(row, ["assignment_id", "assignmentId"])
+            )
+            == "1205"
+        ]
+        logger.info(
+            "Fetched %d assignment_questionnaire rows scoped to assignment_id=1205",
+            len(questionnaire_rows),
+        )
         questionnaire_ids = {
             str(qid)
             for row in questionnaire_rows
