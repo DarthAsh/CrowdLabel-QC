@@ -80,7 +80,6 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     assert set(reader[0].keys()) == {
         "tagger_id",
         "assignment_id",
-        "first_comment_id",
         "first_prompt_id",
         "first_tag_timestamp",
         "eligible_tag_count",
@@ -91,6 +90,7 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
         "pattern_coverage_pct",
         "trimmed_seconds_per_tag",
     }
+    assert "pattern_id" not in reader[0]
 
 
 def test_csv_export_deduplicates_vertical_rows(tmp_path):

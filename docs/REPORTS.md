@@ -139,9 +139,9 @@ and the pattern/speed columns are emitted.
 
 - `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
   assignment `1205` rows are written.
-- `first_comment_id`, `first_prompt_id` – the comment and prompt identifiers
-  from the first eligible tag in the assignment, to anchor the row back to the
-  source data. If the prompt is missing in the source data the column is empty.
+- `first_prompt_id` – the prompt identifier from the first eligible tag in the
+  assignment, to anchor the row back to the source data. If the prompt is
+  missing in the source data the column is empty.
 - `first_tag_timestamp` – the earliest timestamp among the assignment's
   eligible tags.
 - `eligible_tag_count` – number of eligible timestamped YES/NO tags examined for

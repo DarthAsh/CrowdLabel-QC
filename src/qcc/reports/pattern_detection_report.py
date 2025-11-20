@@ -76,7 +76,6 @@ class PatternDetectionReport:
         fieldnames = [
             "tagger_id",
             "assignment_id",
-            "first_comment_id",
             "first_prompt_id",
             "first_tag_timestamp",
             "eligible_tag_count",
@@ -257,7 +256,6 @@ class PatternDetectionReport:
             {
                 "tagger_id": str(first.tagger_id),
                 "assignment_id": assignment_id,
-                "first_comment_id": getattr(first, "comment_id", None),
                 "first_prompt_id": getattr(first, "prompt_id", None),
                 "first_tag_timestamp": self._timestamp_str(timestamp),
                 "eligible_tag_count": tag_count,
@@ -330,9 +328,6 @@ class PatternDetectionReport:
             row: MutableMapping[str, str] = {
                 "tagger_id": str(assignment.get("tagger_id", "")),
                 "assignment_id": str(assignment.get("assignment_id", "") or ""),
-                "first_comment_id": str(
-                    assignment.get("first_comment_id", "") or ""
-                ),
                 "first_prompt_id": str(
                     assignment.get("first_prompt_id", "") or ""
                 ),
