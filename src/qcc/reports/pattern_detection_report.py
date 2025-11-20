@@ -261,11 +261,19 @@ class PatternDetectionReport:
 
     def _build_csv_rows(self, report_data: Mapping[str, object]) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
+        seen_keys: set[tuple[str, str, str]] = set()
 
         horizontal = report_data.get("horizontal") if isinstance(report_data, Mapping) else None
         if isinstance(horizontal, Mapping):
             assignments = horizontal.get("assignments", []) or []
-            rows.extend(self._rows_from_assignments(assignments, perspective="horizontal"))
+            for row in self._rows_from_assignments(
+                assignments, perspective="horizontal"
+            ):
+                key = (row.get("user_id", ""), row.get("assignment_id", ""), "horizontal")
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                rows.append(row)
 
         vertical = report_data.get("vertical") if isinstance(report_data, Mapping) else None
         if isinstance(vertical, Mapping):
@@ -274,15 +282,16 @@ class PatternDetectionReport:
                 if not isinstance(characteristic_entry, Mapping):
                     continue
                 assignments = characteristic_entry.get("assignments", []) or []
-                rows.extend(
-                    self._rows_from_assignments(
-                        assignments,
-                        perspective="vertical",
-                        characteristic_id=str(
-                            characteristic_entry.get("characteristic_id", "")
-                        ),
-                    )
-                )
+                for row in self._rows_from_assignments(
+                    assignments,
+                    perspective="vertical",
+                    characteristic_id=str(characteristic_entry.get("characteristic_id", "")),
+                ):
+                    key = (row.get("user_id", ""), row.get("assignment_id", ""), "vertical")
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    rows.append(row)
 
         return sorted(rows, key=lambda row: row.get("user_id", ""))
 

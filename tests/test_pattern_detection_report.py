@@ -102,6 +102,51 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     }
 
 
+def test_csv_export_deduplicates_vertical_rows(tmp_path):
+    assignments: list[TagAssignment] = []
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    for i in range(12):
+        assignments.append(
+            TagAssignment(
+                tagger_id="worker-1",
+                comment_id=f"comment-{i}",
+                characteristic_id="char-1",
+                value=TagValue.YES,
+                timestamp=start + timedelta(seconds=i),
+                assignment_id="1205",
+            )
+        )
+        assignments.append(
+            TagAssignment(
+                tagger_id="worker-1",
+                comment_id=f"comment-{i+12}",
+                characteristic_id="char-2",
+                value=TagValue.YES,
+                timestamp=start + timedelta(seconds=i + 12),
+                assignment_id="1205",
+            )
+        )
+
+    tagger = Tagger(id="worker-1", tagassignments=assignments)
+    characteristics = [
+        Characteristic(id="char-1", name="C1"),
+        Characteristic(id="char-2", name="C2"),
+    ]
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report([tagger], characteristics)
+    csv_path = tmp_path / "deduped.csv"
+    report.export_to_csv(data, csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    # One horizontal row and one vertical row, even though two characteristics were present
+    assert len(rows) == 2
+    perspectives = {row["perspective"] for row in rows}
+    assert perspectives == {"horizontal", "vertical"}
+
+
 def test_pattern_coverage_partial_window():
     base_assignments = _build_uniform_yes_assignments(count=18)
     tagger = Tagger(id="worker-1", tagassignments=base_assignments)
