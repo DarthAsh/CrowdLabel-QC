@@ -66,6 +66,16 @@ class DBAdapter:
         assignments, _ = self._build_assignments(table_data[self.assignments_table], table_data)
         return assignments
 
+    def read_assignments_from_questionnaires(
+        self, limit: Optional[int] = None
+    ) -> List[TagAssignment]:
+        """Load assignments by walking the questionnaire → question → answer chain."""
+
+        table_data = self._import_questionnaire_root_tables(limit=limit)
+        assignment_rows = table_data.get(self.assignments_table, [])
+        assignments, _ = self._build_assignments(assignment_rows, table_data)
+        return assignments
+
     def read_domain_objects(self, limit: Optional[int] = None) -> Dict[str, Any]:
         """Load assignments and derive the primary domain objects from them."""
 
@@ -92,9 +102,125 @@ class DBAdapter:
             "questions": questions,
         }
 
+    def read_domain_objects_from_questionnaires(
+        self, limit: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Load assignments anchored on questionnaires and derive domain objects."""
+
+        table_data = self._import_questionnaire_root_tables(limit=limit)
+        assignment_rows = table_data.get(self.assignments_table, [])
+        assignments, metadata = self._build_assignments(assignment_rows, table_data)
+
+        comments = self._build_comments(metadata, assignments)
+        taggers = self._build_taggers(metadata, assignments)
+        characteristics = self._build_characteristics(metadata)
+        answers = self._build_answers(metadata)
+        prompt_deployments = self._build_prompt_deployments(metadata)
+        prompts = self._build_prompts(metadata)
+        questions = self._build_questions(metadata)
+
+        return {
+            "assignments": assignments,
+            "comments": comments,
+            "taggers": taggers,
+            "characteristics": characteristics,
+            "answers": answers,
+            "prompt_deployments": prompt_deployments,
+            "prompts": prompts,
+            "questions": questions,
+        }
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _import_questionnaire_root_tables(
+        self, limit: Optional[int] = None
+    ) -> Mapping[str, List[Mapping[str, Any]]]:
+        """Import tables by iterating questionnaires first and filtering dependents."""
+
+        questionnaire_rows = self._importer.fetch_table(
+            "assignment_questionnaires", limit=limit
+        )
+        questionnaire_ids = {
+            str(qid)
+            for row in questionnaire_rows
+            if (qid := self._extract_optional(row, ["questionnaire_id", "questionnaireId"]))
+            not in (None, "")
+        }
+
+        questions_rows = self._importer.fetch_table("questions")
+        questions_filtered = [
+            row
+            for row in questions_rows
+            if str(
+                self._extract_optional(row, ["questionnaire_id", "questionnaireId"])
+            )
+            in questionnaire_ids
+        ]
+        question_ids = {
+            str(qid)
+            for row in questions_filtered
+            if (qid := self._extract_optional(row, ["id", "question_id", "questionId"]))
+            not in (None, "")
+        }
+
+        answers_rows = self._importer.fetch_table("answers")
+        answers_filtered = [
+            row
+            for row in answers_rows
+            if str(self._extract_optional(row, ["question_id", "questionId"]))
+            in question_ids
+        ]
+        answer_ids = {
+            str(aid)
+            for row in answers_filtered
+            if (aid := self._extract_optional(row, ["id", "answer_id", "answerId"]))
+            not in (None, "")
+        }
+
+        assignment_rows = self._importer.fetch_table(self.assignments_table)
+        assignments_filtered = []
+        for row in assignment_rows:
+            comment_id = self._extract_optional(
+                row, ["comment_id", "item_id", "answer_id", "answerId"]
+            )
+            if str(comment_id) in answer_ids:
+                assignments_filtered.append(row)
+
+        deployments_rows = self._importer.fetch_table("tag_prompt_deployments")
+        deployments_filtered = [
+            row
+            for row in deployments_rows
+            if str(self._extract_optional(row, ["assignment_id", "question_id", "questionId"]))
+            in question_ids
+            or str(self._extract_optional(row, ["questionnaire_id", "questionnaireId"]))
+            in questionnaire_ids
+        ]
+
+        prompt_ids = {
+            str(pid)
+            for row in deployments_filtered
+            if (pid := self._extract_optional(row, ["tag_prompt_id", "tagPromptId"]))
+            not in (None, "")
+        }
+        prompts_rows = self._importer.fetch_table("tag_prompts")
+        prompts_filtered = [
+            row
+            for row in prompts_rows
+            if str(self._extract_optional(row, ["id", "tag_prompt_id", "tagPromptId"]))
+            in prompt_ids
+        ]
+
+        return {
+            "assignment_questionnaires": questionnaire_rows,
+            "questions": questions_filtered,
+            "answers": answers_filtered,
+            "tag_prompt_deployments": deployments_filtered,
+            "tag_prompts": prompts_filtered,
+            self.assignments_table: assignments_filtered,
+        }
+
     def _build_assignments(
         self,
         rows: Iterable[Mapping[str, Any]],

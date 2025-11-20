@@ -547,6 +547,117 @@ def test_db_adapter_creates_skip_for_answers_without_tags():
     assert skip_assignment.timestamp == datetime(2024, 6, 1, 12, 0, 0)
 
 
+def test_questionnaire_root_assignments_default_identities():
+    assignment_questionnaires = [
+        {"assignment_id": 999, "questionnaire_id": 77, "user_id": 55}
+    ]
+    questions = [
+        {"id": 123, "questionnaire_id": 77, "text": "Q text"},
+    ]
+    answers = [
+        {"id": 321, "question_id": 123, "comments": "answer body"},
+    ]
+    tag_prompt_deployments = [
+        {
+            "id": 11,
+            "assignment_id": 123,
+            "questionnaire_id": 77,
+            "tag_prompt_id": 3,
+        }
+    ]
+    tag_prompts = [{"id": 3, "prompt": "Spam?"}]
+    answer_tags = [
+        {
+            "id": 7,
+            "comment_id": 321,
+            "tag_prompt_deployment_id": 11,
+            "value": 1,
+            "created_at": datetime(2024, 7, 1, 12, 0, 0),
+        },
+        {
+            "id": 9,
+            "comment_id": 9999,  # unrelated answer, should be ignored
+            "tag_prompt_deployment_id": 11,
+            "value": 1,
+            "created_at": datetime(2024, 7, 1, 13, 0, 0),
+        },
+    ]
+
+    adapter = _make_adapter(
+        {
+            "assignment_questionnaires": assignment_questionnaires,
+            "questions": questions,
+            "answers": answers,
+            "tag_prompt_deployments": tag_prompt_deployments,
+            "tag_prompts": tag_prompts,
+            "answer_tags": answer_tags,
+        }
+    )
+
+    assignments = adapter.read_assignments_from_questionnaires()
+
+    assert len(assignments) == 1
+    assignment = assignments[0]
+    assert assignment.tagger_id == "55"
+    assert assignment.assignment_id == "999"
+    assert assignment.characteristic_id == "11"
+    assert assignment.comment_id == "321"
+    assert assignment.value == TagValue.YES
+
+
+def test_questionnaire_root_domain_objects_builds_comments_and_taggers():
+    assignment_questionnaires = [
+        {"assignment_id": 42, "questionnaire_id": 5, "user_id": 101}
+    ]
+    questions = [
+        {"id": 2, "questionnaire_id": 5, "text": "Is this spam?"},
+    ]
+    answers = [
+        {"id": 8, "question_id": 2, "comments": "Sample body"},
+    ]
+    tag_prompt_deployments = [
+        {"id": 66, "assignment_id": 2, "questionnaire_id": 5, "tag_prompt_id": 5}
+    ]
+    tag_prompts = [{"id": 5, "prompt": "Spam?"}]
+    answer_tags = [
+        {
+            "id": 1,
+            "comment_id": 8,
+            "tag_prompt_deployment_id": 66,
+            "value": 0,
+            "created_at": datetime(2024, 7, 2, 9, 0, 0),
+        }
+    ]
+
+    adapter = _make_adapter(
+        {
+            "assignment_questionnaires": assignment_questionnaires,
+            "questions": questions,
+            "answers": answers,
+            "tag_prompt_deployments": tag_prompt_deployments,
+            "tag_prompts": tag_prompts,
+            "answer_tags": answer_tags,
+        }
+    )
+
+    domain_objects = adapter.read_domain_objects_from_questionnaires()
+
+    assignments = domain_objects["assignments"]
+    assert len(assignments) == 1
+    assert assignments[0].tagger_id == "101"
+    assert assignments[0].assignment_id == "42"
+
+    comments = domain_objects["comments"]
+    assert len(comments) == 1
+    assert comments[0].id == "8"
+    assert comments[0].text == "Sample body"
+
+    taggers = domain_objects["taggers"]
+    assert len(taggers) == 1
+    assert taggers[0].id == "101"
+    assert taggers[0].tagassignments == assignments
+
+
 def test_db_adapter_logs_invalid_rows(caplog):
     caplog.set_level("ERROR")
 
