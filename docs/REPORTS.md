@@ -108,11 +108,10 @@ of its timestamped YES/NO tags belong to a detected pattern window, how many
 tags land inside patterns, the total tags examined, how many answers were
 tagged in the assignment, and the tagging speed metrics for that assignment.
 
-The report returns a single entry for every tagger/assignment pair with
-metadata about the first tag (assignment/tags/group identifiers and earliest
-timestamp) plus the pattern(s) found when scanning that assignment's answer
-tags. Patterns are detected in 12-assignment windows using the same 3- and
-4-token repeat logic as `TaggerPerformanceReport`.
+The report returns a single entry for every tagger/assignment pair with the
+assignment identifiers and pattern(s) found when scanning that assignment's
+answer tags. Patterns are detected in 12-assignment windows using the same 3-
+and 4-token repeat logic as `TaggerPerformanceReport`.
 
 CSV exports include one row per assignment with a semicolon-delimited
 `detected_patterns` column (empty when no patterns were detected) and a boolean
@@ -139,11 +138,6 @@ and the pattern/speed columns are emitted.
 
 - `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
   assignment `1205` rows are written.
-- `first_prompt_id` – the prompt identifier from the first eligible tag in the
-  assignment, to anchor the row back to the source data. If the prompt is
-  missing in the source data the column is empty.
-- `first_tag_timestamp` – the earliest timestamp among the assignment's
-  eligible tags.
 - `eligible_tag_count` – number of eligible timestamped YES/NO tags examined for
   the tagger/assignment pair (the input to pattern detection).
 - `tags_in_pattern_count` – count of those eligible tags that fell within at

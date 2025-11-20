@@ -80,8 +80,6 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     assert set(reader[0].keys()) == {
         "tagger_id",
         "assignment_id",
-        "first_prompt_id",
-        "first_tag_timestamp",
         "eligible_tag_count",
         "tags_in_pattern_count",
         "distinct_answer_count",

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
@@ -76,8 +75,6 @@ class PatternDetectionReport:
         fieldnames = [
             "tagger_id",
             "assignment_id",
-            "first_prompt_id",
-            "first_tag_timestamp",
             "eligible_tag_count",
             "tags_in_pattern_count",
             "distinct_answer_count",
@@ -237,7 +234,6 @@ class PatternDetectionReport:
             return []
 
         first = assignments[0]
-        timestamp = getattr(first, "timestamp", None)
         patterns = sorted({pattern for _, pattern in windows})
         coverage, pattern_tag_count = self._pattern_coverage_stats(
             eligible_assignments, windows
@@ -256,8 +252,6 @@ class PatternDetectionReport:
             {
                 "tagger_id": str(first.tagger_id),
                 "assignment_id": assignment_id,
-                "first_prompt_id": getattr(first, "prompt_id", None),
-                "first_tag_timestamp": self._timestamp_str(timestamp),
                 "eligible_tag_count": tag_count,
                 "tags_in_pattern_count": pattern_tag_count,
                 "distinct_answer_count": answer_count,
@@ -328,12 +322,6 @@ class PatternDetectionReport:
             row: MutableMapping[str, str] = {
                 "tagger_id": str(assignment.get("tagger_id", "")),
                 "assignment_id": str(assignment.get("assignment_id", "") or ""),
-                "first_prompt_id": str(
-                    assignment.get("first_prompt_id", "") or ""
-                ),
-                "first_tag_timestamp": str(
-                    assignment.get("first_tag_timestamp", "") or ""
-                ),
                 "eligible_tag_count": str(
                     assignment.get("eligible_tag_count", "") or ""
                 ),
@@ -381,10 +369,6 @@ class PatternDetectionReport:
             eligible.append(assignment)
 
         return sorted(eligible, key=lambda assignment: assignment.timestamp)
-
-    @staticmethod
-    def _timestamp_str(timestamp: Optional[datetime]) -> str:
-        return timestamp.isoformat() if isinstance(timestamp, datetime) else ""
 
     @staticmethod
     def _pattern_coverage_stats(
