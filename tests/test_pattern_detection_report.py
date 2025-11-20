@@ -45,7 +45,6 @@ def test_horizontal_assignments_capture_pattern_window():
     assert horizontal[0]["tag_count"] == 12
     assert horizontal[0]["pattern_tag_count"] == 12
     assert horizontal[0]["answer_count"] == 12
-    assert horizontal[0]["speed_mean_log2"] == 0.0
     assert horizontal[0]["speed_seconds_per_tag"] == 1.0
 
 
@@ -78,21 +77,18 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     assert len(reader) == 1
     assert all(row["patterns"] == "YYYY" for row in reader)
     assert all(row["pattern_detected"] == "true" for row in reader)
-    assert set(row["perspective"] for row in reader) == {"horizontal"}
     assert set(reader[0].keys()) == {
         "user_id",
         "assignment_id",
         "comment_id",
         "prompt_id",
         "timestamp",
-        "perspective",
         "tag_count",
         "pattern_tag_count",
         "answer_count",
         "patterns",
         "pattern_detected",
         "pattern_coverage",
-        "speed_mean_log2",
         "speed_seconds_per_tag",
     }
 
@@ -138,8 +134,6 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
 
     # Only the horizontal row is exported, even though two characteristics were present
     assert len(rows) == 1
-    perspectives = {row["perspective"] for row in rows}
-    assert perspectives == {"horizontal"}
 
 
 def test_pattern_coverage_partial_window():

@@ -79,14 +79,12 @@ class PatternDetectionReport:
             "comment_id",
             "prompt_id",
             "timestamp",
-            "perspective",
             "tag_count",
             "pattern_tag_count",
             "answer_count",
             "patterns",
             "pattern_detected",
             "pattern_coverage",
-            "speed_mean_log2",
             "speed_seconds_per_tag",
         ]
 
@@ -245,7 +243,7 @@ class PatternDetectionReport:
         coverage, pattern_tag_count = self._pattern_coverage_stats(
             eligible_assignments, windows
         )
-        mean_log2, seconds_per_tag = self._speed_metrics(eligible_assignments)
+        _, seconds_per_tag = self._speed_metrics(eligible_assignments)
         tag_count = len(eligible_assignments)
         answer_count = len(
             {
@@ -268,7 +266,6 @@ class PatternDetectionReport:
                 "patterns": patterns,
                 "pattern_detected": bool(patterns),
                 "pattern_coverage": coverage,
-                "speed_mean_log2": mean_log2,
                 "speed_seconds_per_tag": seconds_per_tag,
             }
         ]
@@ -300,15 +297,13 @@ class PatternDetectionReport:
 
     def _build_csv_rows(self, report_data: Mapping[str, object]) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
-        seen_keys: set[tuple[str, str, str]] = set()
+        seen_keys: set[tuple[str, str]] = set()
 
         horizontal = report_data.get("horizontal") if isinstance(report_data, Mapping) else None
         if isinstance(horizontal, Mapping):
             assignments = horizontal.get("assignments", []) or []
-            for row in self._rows_from_assignments(
-                assignments, perspective="horizontal"
-            ):
-                key = (row.get("user_id", ""), row.get("assignment_id", ""), "horizontal")
+            for row in self._rows_from_assignments(assignments):
+                key = (row.get("user_id", ""), row.get("assignment_id", ""))
                 if key in seen_keys:
                     logger.debug(
                         "Skipping duplicate horizontal row for %s", key
@@ -322,9 +317,6 @@ class PatternDetectionReport:
     def _rows_from_assignments(
         self,
         assignments: Iterable[Mapping[str, object]],
-        *,
-        perspective: str,
-        characteristic_id: Optional[str] = None,
     ) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
         for assignment in assignments:
@@ -341,7 +333,6 @@ class PatternDetectionReport:
                 "comment_id": str(assignment.get("comment_id", "") or ""),
                 "prompt_id": str(assignment.get("prompt_id", "") or ""),
                 "timestamp": str(assignment.get("timestamp", "") or ""),
-                "perspective": perspective,
                 "tag_count": str(assignment.get("tag_count", "") or ""),
                 "pattern_tag_count": str(
                     assignment.get("pattern_tag_count", "") or ""
@@ -350,7 +341,6 @@ class PatternDetectionReport:
                 "patterns": pattern_str,
                 "pattern_detected": str(bool(patterns)).lower(),
                 "pattern_coverage": str(assignment.get("pattern_coverage", "") or ""),
-                "speed_mean_log2": str(assignment.get("speed_mean_log2", "") or ""),
                 "speed_seconds_per_tag": str(
                     assignment.get("speed_seconds_per_tag", "") or ""
                 ),
