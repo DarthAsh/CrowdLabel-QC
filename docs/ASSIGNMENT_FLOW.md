@@ -26,7 +26,13 @@ and how they are attached to taggers for reporting.
    empty, the adapter falls back to the `tag_prompt_deployments` row keyed by the
    `characteristic_id`, then to any row-level ID, and finally marks the ID as
    missing.
-5. **Collect metadata** – As assignments are appended, the adapter groups them by
+5. **Backfill empty answers** – After all rows are parsed, any answer from the
+   `answers` table that did not receive a tag row is given a synthetic
+   `TagAssignment` with a SKIP (numeric `0`) value. The adapter uses the
+   questionnaire mapping to supply the user/assignment IDs and the deployment
+   lookup (via `question_id`) to pick the characteristic, skipping only when a
+   tagger or characteristic cannot be resolved.
+6. **Collect metadata** – As assignments are appended, the adapter groups them by
    comment and tagger, and records comment/characteristic/tagger metadata (plus
    ID-resolution statistics and a sample wiring log) to support later object
    construction.

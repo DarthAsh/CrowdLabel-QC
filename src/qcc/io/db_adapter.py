@@ -108,6 +108,7 @@ class DBAdapter:
 
         answers_lookup: Dict[str, Mapping[str, Any]] = {}
         deployments_lookup: Dict[str, Mapping[str, Any]] = {}
+        deployments_by_question_id: Dict[str, str] = {}
         prompts_lookup: Dict[str, Mapping[str, Any]] = {}
         questions_lookup: Dict[str, Mapping[str, Any]] = {}
         assignment_questionnaires_by_questionnaire: Dict[str, Dict[str, Optional[str]]] = {}
@@ -141,6 +142,12 @@ class DBAdapter:
                 if deployment_id in (None, ""):
                     continue
                 deployments_lookup[str(deployment_id)] = deployment
+
+                question_id = self._extract_optional(
+                    deployment, ["assignment_id", "question_id", "questionId"]
+                )
+                if question_id not in (None, "") and str(question_id) not in deployments_by_question_id:
+                    deployments_by_question_id[str(question_id)] = str(deployment_id)
 
             prompts_rows = table_data.get("tag_prompts") or []
             for prompt in prompts_rows:
@@ -287,9 +294,20 @@ class DBAdapter:
             if not isinstance(assignment, TagAssignment):  # pragma: no cover - defensive
                 raise ValueError(f"Invalid assignment row: {row!r}")
 
-            assignments.append(assignment)
-            assignments_by_comment[assignment.comment_id].append(assignment)
-            assignments_by_tagger[assignment.tagger_id].append(assignment)
+            self._record_assignment(
+                assignment=assignment,
+                row=row,
+                answers_lookup=answers_lookup,
+                deployments_lookup=deployments_lookup,
+                prompts_lookup=prompts_lookup,
+                questions_lookup=questions_lookup,
+                comment_meta=comment_meta,
+                characteristic_meta=characteristic_meta,
+                tagger_meta=tagger_meta,
+                assignments=assignments,
+                assignments_by_comment=assignments_by_comment,
+                assignments_by_tagger=assignments_by_tagger,
+            )
 
             if idx % 1000 == 0:
                 if total_assignments:
@@ -299,173 +317,112 @@ class DBAdapter:
                 else:
                     logger.info("Processed %d assignment rows", idx)
 
-            comment_id = assignment.comment_id
-            answer_row = answers_lookup.get(comment_id)
-            comment_entry = comment_meta.get(comment_id)
-            comment_text = None
-            prompt_id: Optional[Any] = None
-            question_id: Optional[Any] = None
-            response_id: Optional[Any] = None
-            answer_value: Optional[Any] = None
+        missing_answer_ids = set(answers_lookup.keys()) - set(assignments_by_comment.keys())
+        if missing_answer_ids:
+            logger.info(
+                "Adding default SKIP tags for %d answers without assignments",
+                len(missing_answer_ids),
+            )
+        for answer_id in missing_answer_ids:
+            answer_row = answers_lookup[answer_id]
+            answer_question_id = self._extract_optional(
+                answer_row, ["question_id", "questionId"]
+            )
+            questionnaire_id = None
+            if answer_question_id not in (None, ""):
+                question_row = questions_lookup.get(str(answer_question_id))
+                if question_row:
+                    questionnaire_id = self._extract_optional(
+                        question_row, ["questionnaire_id", "questionnaireId"]
+                    )
 
-            if answer_row:
-                comment_text = self._extract_optional(
-                    answer_row,
-                    ["comments", "comment", "answer", "text", "body"],
+            questionnaire_entry = None
+            if questionnaire_id not in (None, ""):
+                questionnaire_entry = assignment_questionnaires_by_questionnaire.get(
+                    str(questionnaire_id)
                 )
-                prompt_id = self._extract_optional(
-                    answer_row,
-                    ["question_id", "prompt_id", "response_id"],
+
+            tagger_id_override = None
+            assignment_id_override = None
+            if questionnaire_entry:
+                tagger_id_override = questionnaire_entry.get("user_id")
+                assignment_id_override = questionnaire_entry.get("assignment_id")
+                assignment_id_sources["questionnaire"] += 1
+            else:
+                assignment_id_sources["missing"] += 1
+
+            if tagger_id_override in (None, ""):
+                skipped_missing_tagger += 1
+                logger.warning(
+                    "Skipping default SKIP assignment for answer %s due to missing user_id",
+                    answer_id,
                 )
-                question_id = self._extract_optional(answer_row, ["question_id"])
-                response_id = self._extract_optional(answer_row, ["response_id"])
-                answer_value = self._extract_optional(answer_row, ["answer", "value"])
+                continue
 
-            if not comment_text:
-                comment_text = self._extract_optional(row, ["comment_text", "text", "body"])
-            if not comment_text:
-                comment_text = comment_id
+            characteristic_id = None
+            if answer_question_id not in (None, ""):
+                characteristic_id = deployments_by_question_id.get(str(answer_question_id))
+            if characteristic_id in (None, "") and deployments_lookup:
+                characteristic_id = next(iter(deployments_lookup.keys()))
+            if characteristic_id in (None, ""):
+                logger.warning(
+                    "Skipping default SKIP assignment for answer %s due to missing characteristic mapping",
+                    answer_id,
+                )
+                continue
 
-            deployment_row = deployments_lookup.get(assignment.characteristic_id)
-            deployment_prompt_id: Optional[Any] = None
-            deployment_question_id: Optional[Any] = None
-            deployment_questionnaire_id: Optional[Any] = None
-            deployment_question_type: Optional[Any] = None
+            deployment_row = deployments_lookup.get(characteristic_id)
+            synthetic_timestamp = self._extract_optional(
+                answer_row,
+                ["created_at", "createdAt", "updated_at", "updatedAt", "timestamp"],
+            )
+            if synthetic_timestamp in (None, ""):
+                synthetic_timestamp = datetime.utcnow()
 
-            if deployment_row:
-                deployment_prompt_id = self._extract_optional(
-                    deployment_row,
+            synthetic_row = {
+                "comment_id": answer_id,
+                "characteristic_id": characteristic_id,
+                "value": 0,
+                "tagged_at": synthetic_timestamp,
+                "tagger_id": tagger_id_override,
+                "assignment_id": assignment_id_override,
+                "prompt_id": self._extract_optional(
+                    deployment_row or {},
                     ["tag_prompt_id", "tagPromptId", "prompt_id", "promptId"],
                 )
-                deployment_question_id = self._extract_optional(
-                    deployment_row,
-                    ["assignment_id", "question_id", "questionId"],
-                )
-                deployment_questionnaire_id = self._extract_optional(
-                    deployment_row,
-                    ["questionnaire_id", "questionnaireId"],
-                )
-                deployment_question_type = self._extract_optional(
-                    deployment_row,
-                    ["question_type", "questionType"],
-                )
+                or answer_question_id,
+            }
 
-            if prompt_id in (None, ""):
-                prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
-            if prompt_id in (None, ""):
-                prompt_id = deployment_prompt_id
-            if prompt_id in (None, ""):
-                prompt_id = question_id or response_id or "unknown_prompt"
+            try:
+                synthetic_assignment = self._row_to_assignment(
+                    synthetic_row,
+                    tagger_id_override=str(tagger_id_override),
+                    assignment_id_override=assignment_id_override,
+                )
+            except (KeyError, ValueError, TypeError) as exc:  # pragma: no cover - defensive
+                logger.error(
+                    "Unable to build synthetic SKIP assignment for answer %s (%s: %s)",
+                    answer_id,
+                    type(exc).__name__,
+                    exc,
+                    exc_info=exc,
+                )
+                continue
 
-            if question_id in (None, "") and deployment_question_id not in (None, ""):
-                question_id = deployment_question_id
-
-            comment_meta_entry = comment_entry or {}
-            comment_meta_entry.setdefault("text", str(comment_text))
-            comment_meta_entry.setdefault(
-                "prompt_id",
-                str(prompt_id) if prompt_id not in (None, "") else "unknown_prompt",
+            self._record_assignment(
+                assignment=synthetic_assignment,
+                row=synthetic_row,
+                answers_lookup=answers_lookup,
+                deployments_lookup=deployments_lookup,
+                prompts_lookup=prompts_lookup,
+                questions_lookup=questions_lookup,
+                comment_meta=comment_meta,
+                characteristic_meta=characteristic_meta,
+                tagger_meta=tagger_meta,
+                assignments=assignments,
+                assignments_by_comment=assignments_by_comment,
+                assignments_by_tagger=assignments_by_tagger,
             )
-            comment_meta_entry.setdefault(
-                "question_id",
-                str(question_id) if question_id not in (None, "") else None,
-            )
-            comment_meta_entry.setdefault(
-                "response_id",
-                str(response_id) if response_id not in (None, "") else None,
-            )
-            comment_meta_entry.setdefault("answer_value", answer_value)
-            if deployment_questionnaire_id not in (None, ""):
-                comment_meta_entry.setdefault(
-                    "questionnaire_id", str(deployment_questionnaire_id)
-                )
-            if deployment_question_type not in (None, ""):
-                comment_meta_entry.setdefault(
-                    "question_type", str(deployment_question_type)
-                )
-            question_row = None
-            if question_id not in (None, ""):
-                question_row = questions_lookup.get(str(question_id))
-            if question_row:
-                question_text = self._extract_optional(
-                    question_row,
-                    ["txt", "text", "question", "prompt"],
-                )
-                if question_text:
-                    comment_meta_entry.setdefault("question_text", str(question_text))
-
-            comment_meta[comment_id] = comment_meta_entry
-
-            characteristic_id = assignment.characteristic_id
-            char_entry = characteristic_meta.setdefault(characteristic_id, {})
-            characteristic_name = char_entry.get("name")
-            if not characteristic_name:
-                characteristic_name = self._extract_optional(
-                    row,
-                    [
-                        "characteristic_name",
-                        "characteristic",
-                        "tag_prompt_characteristic",
-                    ],
-                )
-            prompt_row = None
-            if deployment_prompt_id not in (None, ""):
-                prompt_row = prompts_lookup.get(str(deployment_prompt_id))
-            if prompt_row:
-                prompt_label = self._extract_optional(
-                    prompt_row,
-                    ["prompt", "name", "label", "text"],
-                )
-                if prompt_label:
-                    characteristic_name = prompt_label
-                prompt_description = self._extract_optional(
-                    prompt_row,
-                    ["desc", "description"],
-                )
-                if prompt_description and not char_entry.get("description"):
-                    char_entry["description"] = prompt_description
-                control_type = self._extract_optional(
-                    prompt_row,
-                    ["control_type", "controlType"],
-                )
-                if control_type:
-                    char_entry.setdefault("control_type", str(control_type))
-
-            if deployment_question_id not in (None, ""):
-                char_entry.setdefault("question_id", str(deployment_question_id))
-            if deployment_questionnaire_id not in (None, ""):
-                char_entry.setdefault(
-                    "questionnaire_id", str(deployment_questionnaire_id)
-                )
-            if deployment_question_type not in (None, ""):
-                char_entry.setdefault("question_type", str(deployment_question_type))
-            if question_row:
-                question_text = self._extract_optional(
-                    question_row,
-                    ["txt", "text", "question", "prompt"],
-                )
-                if question_text:
-                    char_entry.setdefault("question_text", str(question_text))
-
-            if not characteristic_name:
-                characteristic_name = characteristic_id
-
-            characteristic_description = char_entry.get("description")
-            if not characteristic_description:
-                characteristic_description = self._extract_optional(
-                    row,
-                    ["characteristic_description", "description"],
-                )
-                if characteristic_description:
-                    char_entry.setdefault("description", characteristic_description)
-
-            char_entry.setdefault("name", str(characteristic_name))
-
-            tagger_id = assignment.tagger_id
-            tagger_entry = tagger_meta.setdefault(tagger_id, {})
-            for key in ("team_id", "tagger_team", "tagger_meta"):
-                if key in row and row[key] is not None:
-                    tagger_entry.setdefault(key, row[key])
 
         logger.info(
             "Finished assignment ingestion: built %d assignments across %d taggers",
@@ -822,6 +779,214 @@ class DBAdapter:
                 }
             )
         return questions
+
+    def _record_assignment(
+        self,
+        *,
+        assignment: TagAssignment,
+        row: Mapping[str, Any],
+        answers_lookup: Mapping[str, Mapping[str, Any]],
+        deployments_lookup: Mapping[str, Mapping[str, Any]],
+        prompts_lookup: Mapping[str, Mapping[str, Any]],
+        questions_lookup: Mapping[str, Mapping[str, Any]],
+        comment_meta: Dict[str, Dict[str, Any]],
+        characteristic_meta: Dict[str, Dict[str, Any]],
+        tagger_meta: Dict[str, Dict[str, Any]],
+        assignments: List[TagAssignment],
+        assignments_by_comment: DefaultDict[str, List[TagAssignment]],
+        assignments_by_tagger: DefaultDict[str, List[TagAssignment]],
+    ) -> None:
+        assignments.append(assignment)
+        assignments_by_comment[assignment.comment_id].append(assignment)
+        assignments_by_tagger[assignment.tagger_id].append(assignment)
+
+        comment_id = assignment.comment_id
+        answer_row = answers_lookup.get(comment_id)
+        comment_entry = comment_meta.get(comment_id)
+        comment_text = None
+        prompt_id: Optional[Any] = None
+        question_id: Optional[Any] = None
+        response_id: Optional[Any] = None
+        answer_value: Optional[Any] = None
+
+        if answer_row:
+            comment_text = self._extract_optional(
+                answer_row,
+                ["comments", "comment", "answer", "text", "body"],
+            )
+            prompt_id = self._extract_optional(
+                answer_row,
+                ["question_id", "prompt_id", "response_id"],
+            )
+            question_id = self._extract_optional(answer_row, ["question_id"])
+            response_id = self._extract_optional(answer_row, ["response_id"])
+            answer_value = self._extract_optional(answer_row, ["answer", "value"])
+
+        if not comment_text:
+            comment_text = self._extract_optional(row, ["comment_text", "text", "body"])
+        if not comment_text:
+            comment_text = comment_id
+
+        deployment_row = deployments_lookup.get(assignment.characteristic_id)
+        deployment_prompt_id: Optional[Any] = None
+        deployment_question_id: Optional[Any] = None
+        deployment_questionnaire_id: Optional[Any] = None
+        deployment_question_type: Optional[Any] = None
+
+        if deployment_row:
+            deployment_prompt_id = self._extract_optional(
+                deployment_row,
+                ["tag_prompt_id", "tagPromptId", "prompt_id", "promptId"],
+            )
+            deployment_question_id = self._extract_optional(
+                deployment_row,
+                ["assignment_id", "question_id", "questionId"],
+            )
+            deployment_questionnaire_id = self._extract_optional(
+                deployment_row,
+                ["questionnaire_id", "questionnaireId"],
+            )
+            deployment_question_type = self._extract_optional(
+                deployment_row,
+                ["question_type", "questionType"],
+            )
+
+        if prompt_id in (None, ""):
+            prompt_id = self._extract_optional(row, ["prompt_id", "promptId"])
+        if prompt_id in (None, ""):
+            prompt_id = deployment_prompt_id
+        if prompt_id in (None, ""):
+            prompt_id = question_id or response_id or "unknown_prompt"
+
+        if question_id in (None, "") and deployment_question_id not in (None, ""):
+            question_id = deployment_question_id
+
+        comment_meta_entry = comment_entry or {}
+        comment_meta_entry.setdefault("text", str(comment_text))
+        comment_meta_entry.setdefault(
+            "prompt_id",
+            str(prompt_id) if prompt_id not in (None, "") else "unknown_prompt",
+        )
+        comment_meta_entry.setdefault(
+            "question_id", str(question_id) if question_id not in (None, "") else None
+        )
+        comment_meta_entry.setdefault(
+            "response_id", str(response_id) if response_id not in (None, "") else None
+        )
+        comment_meta_entry.setdefault("answer_value", answer_value)
+        if deployment_questionnaire_id not in (None, ""):
+            comment_meta_entry.setdefault("questionnaire_id", str(deployment_questionnaire_id))
+        if deployment_question_type not in (None, ""):
+            comment_meta_entry.setdefault("question_type", str(deployment_question_type))
+        question_row = None
+        if question_id not in (None, ""):
+            question_row = questions_lookup.get(str(question_id))
+        if question_row:
+            question_text = self._extract_optional(
+                question_row,
+                ["txt", "text", "question", "prompt"],
+            )
+            if question_text:
+                comment_meta_entry.setdefault("question_text", str(question_text))
+
+        comment_meta[comment_id] = comment_meta_entry
+
+        characteristic_id = assignment.characteristic_id
+        char_entry = characteristic_meta.setdefault(characteristic_id, {})
+        characteristic_name = char_entry.get("name")
+        if not characteristic_name:
+            characteristic_name = self._extract_optional(
+                row,
+                ["characteristic_name", "characteristic", "characteristicLabel", "name"],
+            )
+        if not characteristic_name and deployment_row:
+            characteristic_name = self._extract_optional(deployment_row, ["name", "deployment_name"])
+        if not characteristic_name:
+            characteristic_name = comment_id
+
+        prompt_row = None
+        if deployment_prompt_id not in (None, ""):
+            prompt_row = prompts_lookup.get(str(deployment_prompt_id))
+
+        characteristic_prompt_id = char_entry.get("prompt_id")
+        if not characteristic_prompt_id:
+            characteristic_prompt_id = self._extract_optional(
+                deployment_row or {},
+                ["tag_prompt_id", "tagPromptId", "prompt_id", "promptId"],
+            )
+            if characteristic_prompt_id:
+                char_entry.setdefault("prompt_id", str(characteristic_prompt_id))
+
+        if prompt_row:
+            prompt_label = self._extract_optional(
+                prompt_row,
+                ["prompt", "name", "label", "text"],
+            )
+            if prompt_label:
+                characteristic_name = prompt_label
+            prompt_description = self._extract_optional(
+                prompt_row,
+                ["desc", "description"],
+            )
+            if prompt_description and not char_entry.get("description"):
+                char_entry["description"] = prompt_description
+            control_type = self._extract_optional(
+                prompt_row,
+                ["control_type", "controlType"],
+            )
+            if control_type:
+                char_entry.setdefault("control_type", str(control_type))
+
+        characteristic_question_id = char_entry.get("question_id")
+        if not characteristic_question_id:
+            characteristic_question_id = self._extract_optional(
+                deployment_row or {}, ["assignment_id", "question_id", "questionId"]
+            )
+            if characteristic_question_id:
+                char_entry.setdefault("question_id", str(characteristic_question_id))
+
+        characteristic_questionnaire_id = char_entry.get("questionnaire_id")
+        if not characteristic_questionnaire_id:
+            characteristic_questionnaire_id = self._extract_optional(
+                deployment_row or {}, ["questionnaire_id", "questionnaireId"]
+            )
+            if characteristic_questionnaire_id:
+                char_entry.setdefault("questionnaire_id", str(characteristic_questionnaire_id))
+
+        deployment_question_type = (
+            self._extract_optional(deployment_row or {}, ["question_type", "questionType"])
+            if deployment_question_type in (None, "")
+            else deployment_question_type
+        )
+        if deployment_question_type not in (None, ""):
+            char_entry.setdefault("question_type", str(deployment_question_type))
+        if question_row:
+            question_text = self._extract_optional(
+                question_row,
+                ["txt", "text", "question", "prompt"],
+            )
+            if question_text:
+                char_entry.setdefault("question_text", str(question_text))
+
+        if not characteristic_name:
+            characteristic_name = characteristic_id
+
+        characteristic_description = char_entry.get("description")
+        if not characteristic_description:
+            characteristic_description = self._extract_optional(
+                row,
+                ["characteristic_description", "description"],
+            )
+            if characteristic_description:
+                char_entry.setdefault("description", characteristic_description)
+
+        char_entry.setdefault("name", str(characteristic_name))
+
+        tagger_id_value = assignment.tagger_id
+        tagger_entry = tagger_meta.setdefault(tagger_id_value, {})
+        for key in ("team_id", "tagger_team", "tagger_meta"):
+            if key in row and row[key] is not None:
+                tagger_entry.setdefault(key, row[key])
 
     def _row_to_assignment(
         self,

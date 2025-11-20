@@ -494,6 +494,59 @@ def test_db_adapter_skips_rows_without_user_id(caplog):
     assert "Skipping assignment row with no user_id/tagger" in caplog.text
 
 
+def test_db_adapter_creates_skip_for_answers_without_tags():
+    answers = [
+        {
+            "id": 202,
+            "question_id": 88,
+            "comments": "Untouched answer",
+            "created_at": datetime(2024, 6, 1, 12, 0, 0),
+        }
+    ]
+    questions = [
+        {
+            "id": 88,
+            "questionnaire_id": 1001,
+        }
+    ]
+    assignment_questionnaires = [
+        {
+            "assignment_id": 555,
+            "questionnaire_id": 1001,
+            "user_id": 77,
+        }
+    ]
+    tag_prompt_deployments = [
+        {
+            "id": 42,
+            "assignment_id": 88,
+            "questionnaire_id": 1001,
+        }
+    ]
+
+    adapter = _make_adapter(
+        {
+            "answers": answers,
+            "questions": questions,
+            "assignment_questionnaires": assignment_questionnaires,
+            "tag_prompt_deployments": tag_prompt_deployments,
+            "answer_tags": [],
+        }
+    )
+
+    domain_objects = adapter.read_domain_objects()
+
+    assignments = domain_objects["assignments"]
+    assert len(assignments) == 1
+    skip_assignment = assignments[0]
+    assert skip_assignment.comment_id == "202"
+    assert skip_assignment.characteristic_id == "42"
+    assert skip_assignment.value == TagValue.SKIP
+    assert skip_assignment.assignment_id == "555"
+    assert skip_assignment.tagger_id == "77"
+    assert skip_assignment.timestamp == datetime(2024, 6, 1, 12, 0, 0)
+
+
 def test_db_adapter_logs_invalid_rows(caplog):
     caplog.set_level("ERROR")
 
