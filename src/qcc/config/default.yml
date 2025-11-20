@@ -9,7 +9,7 @@ input:
     port: 3306
     user: root
     password: root
-    database: mysql
+    database: quality_control
     charset: null
     use_pure: true
     env_prefix: "MYSQL"

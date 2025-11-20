@@ -58,7 +58,7 @@ def test_db_adapter_merges_answers_with_tags():
     answer_tags = [
         {
             "id": 1,
-            "answer_id": 101,
+            "comment_id": 101,
             "tag_prompt_deployment_id": 5,
             "user_id": 42,
             "value": "1",
@@ -66,7 +66,7 @@ def test_db_adapter_merges_answers_with_tags():
         },
         {
             "id": 2,
-            "answer_id": 102,
+            "comment_id": 102,
             "tag_prompt_deployment_id": 5,
             "user_id": 99,
             "value": "0",
@@ -123,7 +123,7 @@ def test_db_adapter_merges_answers_with_tags():
     assert assignments[0].comment_id == "101"
     assert assignments[0].value == TagValue.YES
     assert assignments[1].comment_id == "102"
-    assert assignments[1].value == TagValue.NO
+    assert assignments[1].value == TagValue.SKIP
 
     comments = {comment.id: comment for comment in domain_objects["comments"]}
     assert comments["101"].text == "First answer"
@@ -166,7 +166,7 @@ def test_read_assignments_applies_limit():
     answer_tags = [
         {
             "id": 1,
-            "answer_id": 1,
+            "comment_id": 1,
             "tag_prompt_deployment_id": 5,
             "user_id": 7,
             "value": "1",
@@ -174,7 +174,7 @@ def test_read_assignments_applies_limit():
         },
         {
             "id": 2,
-            "answer_id": 1,
+            "comment_id": 1,
             "tag_prompt_deployment_id": 5,
             "user_id": 8,
             "value": "0",
@@ -198,7 +198,7 @@ def test_db_adapter_normalizes_negative_numeric_tag_values():
     answer_tags = [
         {
             "id": 1,
-            "answer_id": 1,
+            "comment_id": 1,
             "tag_prompt_deployment_id": 10,
             "user_id": 7,
             "value": "-1",
@@ -206,7 +206,7 @@ def test_db_adapter_normalizes_negative_numeric_tag_values():
         },
         {
             "id": 2,
-            "answer_id": 2,
+            "comment_id": 2,
             "tag_prompt_deployment_id": 10,
             "user_id": 8,
             "value": "-1.0",
@@ -219,8 +219,8 @@ def test_db_adapter_normalizes_negative_numeric_tag_values():
     assignments = adapter.read_assignments()
 
     assert [assignment.value for assignment in assignments] == [
-        TagValue.NA,
-        TagValue.NA,
+        TagValue.NO,
+        TagValue.NO,
     ]
 
 
@@ -375,13 +375,13 @@ def test_db_adapter_handles_camel_cased_answer_identifiers():
             "answerId": 501,
             "questionId": 321,
             "responseId": 654,
-            "comments": "Camel", 
+            "comments": "Camel",
         },
     ]
     answer_tags = [
         {
             "ID": 7,
-            "answerId": 501,
+            "commentId": 501,
             "tagPromptDeploymentId": 11,
             "userId": 9001,
             "value": "TRUE",
@@ -405,6 +405,148 @@ def test_db_adapter_handles_camel_cased_answer_identifiers():
     assert answers_output[0]["question_id"] == "321"
 
 
+def test_db_adapter_uses_answer_id_for_comment_mapping():
+    answers = [
+        {
+            "id": 777,
+            "question_id": 12,
+            "comments": "Answer text",
+        }
+    ]
+    answer_tags = [
+        {
+            "id": 3,
+            "answer_id": 777,
+            "tag_prompt_deployment_id": 15,
+            "user_id": 54,
+            "value": -1,
+            "created_at": datetime(2024, 5, 1, 8, 0, 0),
+        },
+        {
+            "id": 4,
+            "answerId": 777,
+            "tag_prompt_deployment_id": 15,
+            "user_id": 54,
+            "value": 0,
+            "created_at": datetime(2024, 5, 1, 8, 5, 0),
+        },
+    ]
+
+    adapter = _make_adapter({"answer_tags": answer_tags, "answers": answers})
+
+    domain_objects = adapter.read_domain_objects()
+
+    assignments = domain_objects["assignments"]
+    assert len(assignments) == 2
+    assert {assignment.comment_id for assignment in assignments} == {"777"}
+    assert {assignment.value for assignment in assignments} == {
+        TagValue.NO,
+        TagValue.SKIP,
+    }
+
+
+def test_db_adapter_skips_rows_without_user_id(caplog):
+    caplog.set_level("INFO")
+
+    answers = [
+        {
+            "id": 555,
+            "question_id": 101,
+            "comments": "Answer body",
+        }
+    ]
+    questions = [
+        {
+            "id": 101,
+            "questionnaire_id": 303,
+            "text": "Question text",
+        }
+    ]
+    assignment_questionnaires = [
+        {
+            "assignment_id": 9001,
+            "questionnaire_id": 303,
+            # deliberately omit user_id to force skipping
+        }
+    ]
+    answer_tags = [
+        {
+            "id": 12,
+            "answer_id": 555,
+            "tag_prompt_deployment_id": 31,
+            "value": 1,
+            "created_at": datetime(2024, 5, 2, 9, 0, 0),
+        }
+    ]
+
+    adapter = _make_adapter(
+        {
+            "answer_tags": answer_tags,
+            "answers": answers,
+            "questions": questions,
+            "assignment_questionnaires": assignment_questionnaires,
+        }
+    )
+
+    domain_objects = adapter.read_domain_objects()
+
+    assert domain_objects["assignments"] == []
+    assert "Skipping assignment row with no user_id/tagger" in caplog.text
+
+
+def test_db_adapter_creates_skip_for_answers_without_tags():
+    answers = [
+        {
+            "id": 202,
+            "question_id": 88,
+            "comments": "Untouched answer",
+            "created_at": datetime(2024, 6, 1, 12, 0, 0),
+        }
+    ]
+    questions = [
+        {
+            "id": 88,
+            "questionnaire_id": 1001,
+        }
+    ]
+    assignment_questionnaires = [
+        {
+            "assignment_id": 555,
+            "questionnaire_id": 1001,
+            "user_id": 77,
+        }
+    ]
+    tag_prompt_deployments = [
+        {
+            "id": 42,
+            "assignment_id": 88,
+            "questionnaire_id": 1001,
+        }
+    ]
+
+    adapter = _make_adapter(
+        {
+            "answers": answers,
+            "questions": questions,
+            "assignment_questionnaires": assignment_questionnaires,
+            "tag_prompt_deployments": tag_prompt_deployments,
+            "answer_tags": [],
+        }
+    )
+
+    domain_objects = adapter.read_domain_objects()
+
+    assignments = domain_objects["assignments"]
+    assert len(assignments) == 1
+    skip_assignment = assignments[0]
+    assert skip_assignment.comment_id == "202"
+    assert skip_assignment.characteristic_id == "42"
+    assert skip_assignment.value == TagValue.SKIP
+    assert skip_assignment.assignment_id == "555"
+    assert skip_assignment.tagger_id == "77"
+    assert skip_assignment.timestamp == datetime(2024, 6, 1, 12, 0, 0)
+
+
 def test_db_adapter_logs_invalid_rows(caplog):
     caplog.set_level("ERROR")
 
@@ -412,7 +554,7 @@ def test_db_adapter_logs_invalid_rows(caplog):
         "answer_tags": [
             {
                 "id": 1,
-                "answer_id": 101,
+                "comment_id": 101,
                 "tag_prompt_deployment_id": 5,
                 "user_id": "trouble-user",
                 # intentionally omit "value" to trigger a parsing error
