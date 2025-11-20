@@ -109,16 +109,16 @@ tags land inside patterns, the total tags examined, how many answers were
 tagged in the assignment, and the tagging speed metrics for that assignment.
 
 The report returns a single entry for every tagger/assignment pair with
-metadata (`assignment_id`, `comment_id`, `prompt_id`, `timestamp`) plus the
-pattern(s) found when scanning that assignment's answer tags. Patterns are
-detected in 12-assignment windows using the same 3- and 4-token repeat logic as
-`TaggerPerformanceReport`.
+metadata about the first tag (assignment/tags/group identifiers and earliest
+timestamp) plus the pattern(s) found when scanning that assignment's answer
+tags. Patterns are detected in 12-assignment windows using the same 3- and
+4-token repeat logic as `TaggerPerformanceReport`.
 
 CSV exports include one row per assignment with a semicolon-delimited
-`patterns` column (empty when no patterns were detected) and a boolean
-`pattern_detected` column for quick filtering. Only `user_id`, `assignment_id`,
-`comment_id`, `prompt_id`, `timestamp`, tag and answer counts, and the
-pattern/speed columns are emitted.
+`detected_patterns` column (empty when no patterns were detected) and a boolean
+`has_repeating_pattern` column for quick filtering. Only `tagger_id`,
+`assignment_id`, first-comment/prompt/timestamp metadata, tag and answer counts,
+and the pattern/speed columns are emitted.
 
 ### How patterns are detected and attached
 
@@ -132,30 +132,33 @@ pattern/speed columns are emitted.
   token matching to avoid double-counting.
 - **Annotation:** When a window hits, the assignment is marked with the literal
   repeated pattern (for example, `YYYY`, `NNNN`, or `YYNN`), and
-  `pattern_detected` is set to `true` for that tagger/assignment pair. An
+  `has_repeating_pattern` is set to `true` for that tagger/assignment pair. An
   assignment can accrue multiple pattern labels if multiple windows match.
 
 ### CSV column reference
 
-- `user_id`, `assignment_id`, `comment_id`, `prompt_id` – identifiers copied
-  directly from the enriched `TagAssignment`. Only assignment `1205` rows are
-  written.
-- `timestamp` – the earliest timestamp among the assignment's eligible tags.
-- `tag_count` – number of eligible timestamped YES/NO tags examined for the
-  user/assignment pair.
-- `pattern_tag_count` – count of those eligible tags that fell within at least
-  one detected pattern window.
-- `answer_count` – number of distinct answers (comment IDs) tagged by the user
-  for the assignment.
-- `patterns` – semicolon-delimited list of patterns that hit within the
+- `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
+  assignment `1205` rows are written.
+- `first_comment_id`, `first_prompt_id` – the comment and prompt identifiers
+  from the first eligible tag in the assignment, to anchor the row back to the
+  source data. If the prompt is missing in the source data the column is empty.
+- `first_tag_timestamp` – the earliest timestamp among the assignment's
+  eligible tags.
+- `eligible_tag_count` – number of eligible timestamped YES/NO tags examined for
+  the tagger/assignment pair (the input to pattern detection).
+- `tags_in_pattern_count` – count of those eligible tags that fell within at
+  least one detected pattern window.
+- `distinct_answer_count` – number of distinct answers (comment IDs) tagged by
+  the user for the assignment.
+- `detected_patterns` – semicolon-delimited list of patterns that hit within the
   assignment; empty when no pattern was detected for that row.
-- `pattern_detected` – `true` when any pattern was found for that assignment,
-  else `false`.
-- `pattern_coverage` – percentage (0–100, rounded to two decimal places) of the
-  assignment's eligible tags that fell inside one or more detected pattern
+- `has_repeating_pattern` – `true` when any pattern was found for that
+  assignment, else `false`.
+- `pattern_coverage_pct` – percentage (0–100, rounded to two decimal places) of
+  the assignment's eligible tags that fell inside one or more detected pattern
   windows.
-- `speed_seconds_per_tag` – the seconds-per-tag conversion computed from the
-  assignment's eligible tags.
+- `trimmed_seconds_per_tag` – seconds-per-tag using the log-trimmed mean
+  computed from the assignment's eligible tags.
 
 Use the CSV export to trace any flagged pattern back to the exact assignment and
 context that produced it.

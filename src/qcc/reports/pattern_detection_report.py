@@ -74,18 +74,18 @@ class PatternDetectionReport:
         csv_path = Path(output_path)
         rows = self._build_csv_rows(report_data)
         fieldnames = [
-            "user_id",
+            "tagger_id",
             "assignment_id",
-            "comment_id",
-            "prompt_id",
-            "timestamp",
-            "tag_count",
-            "pattern_tag_count",
-            "answer_count",
-            "patterns",
-            "pattern_detected",
-            "pattern_coverage",
-            "speed_seconds_per_tag",
+            "first_comment_id",
+            "first_prompt_id",
+            "first_tag_timestamp",
+            "eligible_tag_count",
+            "tags_in_pattern_count",
+            "distinct_answer_count",
+            "detected_patterns",
+            "has_repeating_pattern",
+            "pattern_coverage_pct",
+            "trimmed_seconds_per_tag",
         ]
 
         with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
@@ -257,16 +257,16 @@ class PatternDetectionReport:
             {
                 "tagger_id": str(first.tagger_id),
                 "assignment_id": assignment_id,
-                "comment_id": getattr(first, "comment_id", None),
-                "prompt_id": getattr(first, "prompt_id", None),
-                "timestamp": self._timestamp_str(timestamp),
-                "tag_count": tag_count,
-                "pattern_tag_count": pattern_tag_count,
-                "answer_count": answer_count,
-                "patterns": patterns,
-                "pattern_detected": bool(patterns),
-                "pattern_coverage": coverage,
-                "speed_seconds_per_tag": seconds_per_tag,
+                "first_comment_id": getattr(first, "comment_id", None),
+                "first_prompt_id": getattr(first, "prompt_id", None),
+                "first_tag_timestamp": self._timestamp_str(timestamp),
+                "eligible_tag_count": tag_count,
+                "tags_in_pattern_count": pattern_tag_count,
+                "distinct_answer_count": answer_count,
+                "detected_patterns": patterns,
+                "has_repeating_pattern": bool(patterns),
+                "pattern_coverage_pct": coverage,
+                "trimmed_seconds_per_tag": seconds_per_tag,
             }
         ]
 
@@ -303,7 +303,7 @@ class PatternDetectionReport:
         if isinstance(horizontal, Mapping):
             assignments = horizontal.get("assignments", []) or []
             for row in self._rows_from_assignments(assignments):
-                key = (row.get("user_id", ""), row.get("assignment_id", ""))
+                key = (row.get("tagger_id", ""), row.get("assignment_id", ""))
                 if key in seen_keys:
                     logger.debug(
                         "Skipping duplicate horizontal row for %s", key
@@ -312,7 +312,7 @@ class PatternDetectionReport:
                 seen_keys.add(key)
                 rows.append(row)
 
-        return sorted(rows, key=lambda row: row.get("user_id", ""))
+        return sorted(rows, key=lambda row: row.get("tagger_id", ""))
 
     def _rows_from_assignments(
         self,
@@ -325,30 +325,42 @@ class PatternDetectionReport:
                     "Skipping non-mapping assignment entry: %s", assignment
                 )
                 continue
-            patterns = assignment.get("patterns", []) or []
+            patterns = assignment.get("detected_patterns", []) or []
             pattern_str = ";".join(patterns) if patterns else ""
             row: MutableMapping[str, str] = {
-                "user_id": str(assignment.get("tagger_id", "")),
+                "tagger_id": str(assignment.get("tagger_id", "")),
                 "assignment_id": str(assignment.get("assignment_id", "") or ""),
-                "comment_id": str(assignment.get("comment_id", "") or ""),
-                "prompt_id": str(assignment.get("prompt_id", "") or ""),
-                "timestamp": str(assignment.get("timestamp", "") or ""),
-                "tag_count": str(assignment.get("tag_count", "") or ""),
-                "pattern_tag_count": str(
-                    assignment.get("pattern_tag_count", "") or ""
+                "first_comment_id": str(
+                    assignment.get("first_comment_id", "") or ""
                 ),
-                "answer_count": str(assignment.get("answer_count", "") or ""),
-                "patterns": pattern_str,
-                "pattern_detected": str(bool(patterns)).lower(),
-                "pattern_coverage": str(assignment.get("pattern_coverage", "") or ""),
-                "speed_seconds_per_tag": str(
-                    assignment.get("speed_seconds_per_tag", "") or ""
+                "first_prompt_id": str(
+                    assignment.get("first_prompt_id", "") or ""
+                ),
+                "first_tag_timestamp": str(
+                    assignment.get("first_tag_timestamp", "") or ""
+                ),
+                "eligible_tag_count": str(
+                    assignment.get("eligible_tag_count", "") or ""
+                ),
+                "tags_in_pattern_count": str(
+                    assignment.get("tags_in_pattern_count", "") or ""
+                ),
+                "distinct_answer_count": str(
+                    assignment.get("distinct_answer_count", "") or ""
+                ),
+                "detected_patterns": pattern_str,
+                "has_repeating_pattern": str(bool(patterns)).lower(),
+                "pattern_coverage_pct": str(
+                    assignment.get("pattern_coverage_pct", "") or ""
+                ),
+                "trimmed_seconds_per_tag": str(
+                    assignment.get("trimmed_seconds_per_tag", "") or ""
                 ),
             }
 
-            if not row["user_id"] or not row["assignment_id"]:
+            if not row["tagger_id"] or not row["assignment_id"]:
                 logger.warning(
-                    "Skipping row missing required identifiers user_id/assignment_id: %s",
+                    "Skipping row missing required identifiers tagger_id/assignment_id: %s",
                     row,
                 )
                 continue

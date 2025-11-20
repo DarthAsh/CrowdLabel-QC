@@ -38,14 +38,14 @@ def test_horizontal_assignments_capture_pattern_window():
     horizontal = data["horizontal"]["assignments"]
 
     assert len(horizontal) == 1
-    assert horizontal[0]["patterns"] == ["YYYY"]
-    assert horizontal[0]["pattern_detected"] is True
+    assert horizontal[0]["detected_patterns"] == ["YYYY"]
+    assert horizontal[0]["has_repeating_pattern"] is True
     assert horizontal[0]["assignment_id"] == "1205"
-    assert horizontal[0]["pattern_coverage"] == 100.0
-    assert horizontal[0]["tag_count"] == 12
-    assert horizontal[0]["pattern_tag_count"] == 12
-    assert horizontal[0]["answer_count"] == 12
-    assert horizontal[0]["speed_seconds_per_tag"] == 1.0
+    assert horizontal[0]["pattern_coverage_pct"] == 100.0
+    assert horizontal[0]["eligible_tag_count"] == 12
+    assert horizontal[0]["tags_in_pattern_count"] == 12
+    assert horizontal[0]["distinct_answer_count"] == 12
+    assert horizontal[0]["trimmed_seconds_per_tag"] == 1.0
 
 
 def test_vertical_assignments_filtered_by_characteristic():
@@ -75,21 +75,21 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
 
     # Only the horizontal row is included
     assert len(reader) == 1
-    assert all(row["patterns"] == "YYYY" for row in reader)
-    assert all(row["pattern_detected"] == "true" for row in reader)
+    assert all(row["detected_patterns"] == "YYYY" for row in reader)
+    assert all(row["has_repeating_pattern"] == "true" for row in reader)
     assert set(reader[0].keys()) == {
-        "user_id",
+        "tagger_id",
         "assignment_id",
-        "comment_id",
-        "prompt_id",
-        "timestamp",
-        "tag_count",
-        "pattern_tag_count",
-        "answer_count",
-        "patterns",
-        "pattern_detected",
-        "pattern_coverage",
-        "speed_seconds_per_tag",
+        "first_comment_id",
+        "first_prompt_id",
+        "first_tag_timestamp",
+        "eligible_tag_count",
+        "tags_in_pattern_count",
+        "distinct_answer_count",
+        "detected_patterns",
+        "has_repeating_pattern",
+        "pattern_coverage_pct",
+        "trimmed_seconds_per_tag",
     }
 
 
@@ -142,9 +142,9 @@ def test_pattern_coverage_partial_window():
     report = PatternDetectionReport(base_assignments)
 
     data = report.generate_assignment_report([tagger], [])
-    coverage = data["horizontal"]["assignments"][0]["pattern_coverage"]
-    pattern_tag_count = data["horizontal"]["assignments"][0]["pattern_tag_count"]
-    tag_count = data["horizontal"]["assignments"][0]["tag_count"]
+    coverage = data["horizontal"]["assignments"][0]["pattern_coverage_pct"]
+    pattern_tag_count = data["horizontal"]["assignments"][0]["tags_in_pattern_count"]
+    tag_count = data["horizontal"]["assignments"][0]["eligible_tag_count"]
 
     assert coverage == 66.67
     assert pattern_tag_count == 12
@@ -167,7 +167,7 @@ def test_csv_rows_sorted_by_user_id(tmp_path):
     with csv_path.open(newline="", encoding="utf-8") as csv_file:
         rows = list(csv.DictReader(csv_file))
 
-    user_ids = [row["user_id"] for row in rows]
+    user_ids = [row["tagger_id"] for row in rows]
     assert user_ids == sorted(user_ids)
 
 
