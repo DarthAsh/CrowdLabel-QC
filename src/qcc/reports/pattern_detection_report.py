@@ -96,7 +96,10 @@ class PatternDetectionReport:
                 windows = self._pattern_windows(eligible_assignments, strategy)
                 per_assignment.extend(
                     self._assignment_entries(
-                        eligible_assignments, windows, assignment_id=assignment_id
+                        assignments,
+                        eligible_assignments,
+                        windows,
+                        assignment_id=assignment_id,
                     )
                 )
 
@@ -127,14 +130,12 @@ class PatternDetectionReport:
                     eligible_assignments = self._eligible_assignments(
                         characteristic_assignments
                     )
-                    if not eligible_assignments:
-                        continue
-
                     windows = self._pattern_windows(eligible_assignments, strategy)
                     characteristic_entries.extend(
                         self._assignment_entries(
-                            eligible_assignments,
-                            windows,
+                            assignments=characteristic_assignments,
+                            eligible_assignments=eligible_assignments,
+                            windows=windows,
                             assignment_id=assignment_id,
                         )
                     )
@@ -202,6 +203,7 @@ class PatternDetectionReport:
     def _assignment_entries(
         self,
         assignments: Sequence[TagAssignment],
+        eligible_assignments: Sequence[TagAssignment],
         windows: Sequence[tuple[int, str]],
         *,
         assignment_id: Optional[str],
@@ -213,10 +215,10 @@ class PatternDetectionReport:
         timestamp = getattr(first, "timestamp", None)
         patterns = sorted({pattern for _, pattern in windows})
         coverage, pattern_tag_count = self._pattern_coverage_stats(
-            assignments, windows
+            eligible_assignments, windows
         )
-        mean_log2, seconds_per_tag = self._speed_metrics(assignments)
-        tag_count = len(assignments)
+        mean_log2, seconds_per_tag = self._speed_metrics(eligible_assignments)
+        tag_count = len(eligible_assignments)
         answer_count = len(
             {
                 getattr(assignment, "comment_id", None)
