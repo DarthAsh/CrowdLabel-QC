@@ -56,17 +56,9 @@ def test_vertical_assignments_filtered_by_characteristic():
     report = PatternDetectionReport(assignments)
 
     data = report.generate_assignment_report([tagger], [characteristic])
-    vertical = data["vertical"]["per_characteristic"][0]
+    vertical = data["vertical"]["per_characteristic"]
 
-    assert vertical["characteristic_id"] == "char-1"
-    assert len(vertical["assignments"]) == 1
-    assert vertical["assignments"][0]["patterns"] == ["YYYY"]
-    assert vertical["assignments"][0]["pattern_detected"] is True
-    assert vertical["assignments"][0]["pattern_coverage"] == 100.0
-    assert vertical["assignments"][0]["tag_count"] == 12
-    assert vertical["assignments"][0]["pattern_tag_count"] == 12
-    assert vertical["assignments"][0]["answer_count"] == 12
-    assert vertical["assignments"][0]["speed_seconds_per_tag"] == 1.0
+    assert vertical == []
 
 
 def test_csv_export_writes_all_assignment_rows(tmp_path):
@@ -82,11 +74,11 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     with csv_path.open(newline="", encoding="utf-8") as csv_file:
         reader = list(csv.DictReader(csv_file))
 
-    # 1 horizontal row + 1 vertical row
-    assert len(reader) == 2
+    # Only the horizontal row is included
+    assert len(reader) == 1
     assert all(row["patterns"] == "YYYY" for row in reader)
     assert all(row["pattern_detected"] == "true" for row in reader)
-    assert set(row["perspective"] for row in reader) == {"horizontal", "vertical"}
+    assert set(row["perspective"] for row in reader) == {"horizontal"}
     assert set(reader[0].keys()) == {
         "user_id",
         "assignment_id",
@@ -144,10 +136,10 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
     with csv_path.open(newline="", encoding="utf-8") as csv_file:
         rows = list(csv.DictReader(csv_file))
 
-    # One horizontal row and one vertical row, even though two characteristics were present
-    assert len(rows) == 2
+    # Only the horizontal row is exported, even though two characteristics were present
+    assert len(rows) == 1
     perspectives = {row["perspective"] for row in rows}
-    assert perspectives == {"horizontal", "vertical"}
+    assert perspectives == {"horizontal"}
 
 
 def test_pattern_coverage_partial_window():

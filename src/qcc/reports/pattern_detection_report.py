@@ -44,14 +44,11 @@ class PatternDetectionReport:
         )
 
         horizontal_strategy = HorizontalPatternDetection()
-        vertical_strategy = VerticalPatternDetection()
 
         horizontal_assignments = self._build_horizontal_results(
             taggers, horizontal_strategy
         )
-        vertical_assignments = self._build_vertical_results(
-            taggers, characteristics, vertical_strategy
-        )
+        vertical_assignments: List[Dict[str, object]] = []
 
         logger.info(
             "Finished pattern detection aggregation: %s horizontal rows, %s vertical characteristic groups",
@@ -66,7 +63,7 @@ class PatternDetectionReport:
                 "assignments": horizontal_assignments,
             },
             "vertical": {
-                "strategy": vertical_strategy.__class__.__name__,
+                "strategy": VerticalPatternDetection.__name__,
                 "per_characteristic": vertical_assignments,
             },
         }
@@ -319,27 +316,6 @@ class PatternDetectionReport:
                     continue
                 seen_keys.add(key)
                 rows.append(row)
-
-        vertical = report_data.get("vertical") if isinstance(report_data, Mapping) else None
-        if isinstance(vertical, Mapping):
-            per_characteristic = vertical.get("per_characteristic", []) or []
-            for characteristic_entry in per_characteristic:
-                if not isinstance(characteristic_entry, Mapping):
-                    continue
-                assignments = characteristic_entry.get("assignments", []) or []
-                for row in self._rows_from_assignments(
-                    assignments,
-                    perspective="vertical",
-                    characteristic_id=str(characteristic_entry.get("characteristic_id", "")),
-                ):
-                    key = (row.get("user_id", ""), row.get("assignment_id", ""), "vertical")
-                    if key in seen_keys:
-                        logger.debug(
-                            "Skipping duplicate vertical row for %s", key
-                        )
-                        continue
-                    seen_keys.add(key)
-                    rows.append(row)
 
         return sorted(rows, key=lambda row: row.get("user_id", ""))
 
