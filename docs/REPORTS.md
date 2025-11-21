@@ -139,9 +139,11 @@ and the pattern/speed columns are emitted.
 
 - `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
   assignment `1205` rows are written.
-- `# Tags Available` – total number of answer tags present for the
-  tagger/assignment pair, including those tagged as `0`/`SKIP` or other values
-  outside the YES/NO set used for pattern detection.
+- `# Tags Available` – maximum possible tags for the tagger/assignment pair,
+  summed per answer using the questionnaire's tag capacity (for example,
+  questionnaire `753` contributes 2 tags per answer and `754` contributes 1),
+  including answers tagged as `0`/`SKIP` or other values outside the YES/NO set
+  used for pattern detection.
 - `# Tags Set` – number of eligible timestamped YES/NO tags examined for the
   tagger/assignment pair (the input to pattern detection).
 - `# Tags Set in a pattern` – count of those eligible tags that fell within at

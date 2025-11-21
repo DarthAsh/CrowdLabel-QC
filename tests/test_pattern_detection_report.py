@@ -183,6 +183,48 @@ def test_available_tags_include_skips():
     assert horizontal["# Tags Set"] == 1
 
 
+def test_tags_available_uses_questionnaire_capacity():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-753-1",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-753-2",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id="753",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-754",
+            characteristic_id="char-1",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=2),
+            assignment_id="1205",
+            questionnaire_id="754",
+        ),
+    ]
+
+    report = PatternDetectionReport(assignments)
+    data = report.generate_assignment_report([Tagger(id="worker-1", tagassignments=assignments)], [])
+    horizontal = data["horizontal"]["assignments"][0]
+
+    # questionnaire_id 753 allows 2 tags per answer and 754 allows 1
+    assert horizontal["# Tags Available"] == 5
+    assert horizontal["# Tags Set"] == 2
+    assert horizontal["# Comments available to tag"] == 3
+
+
 def test_csv_rows_sorted_by_user_id(tmp_path):
     assignments_a = _build_uniform_yes_assignments(assignment_id="1205")
     tagger_a = Tagger(id="user-1", tagassignments=assignments_a)

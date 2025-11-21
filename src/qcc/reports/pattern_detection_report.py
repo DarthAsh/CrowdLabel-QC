@@ -25,6 +25,7 @@ class PatternDetectionReport:
     """Generate per-assignment pattern detection results."""
 
     TARGET_ASSIGNMENT_ID = "1205"
+    QUESTIONNAIRE_TAG_CAPACITY = {"753": 2, "754": 1}
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
@@ -240,7 +241,12 @@ class PatternDetectionReport:
             eligible_assignments, windows
         )
         _, seconds_per_tag = self._speed_metrics(eligible_assignments)
-        available_tag_count = len(assignments)
+        available_tag_count = sum(
+            self._questionnaire_tag_capacity(
+                getattr(assignment, "questionnaire_id", None)
+            )
+            for assignment in assignments
+        )
         tag_count = len(eligible_assignments)
         answer_count = len(
             {
@@ -402,6 +408,12 @@ class PatternDetectionReport:
         mean_log2 = strategy.speed_log2(tagger)
         seconds = strategy.seconds_per_tag(mean_log2)
         return round(mean_log2, 6), round(seconds, 6)
+
+    def _questionnaire_tag_capacity(self, questionnaire_id: Optional[str]) -> int:
+        if questionnaire_id in (None, ""):
+            return 1
+
+        return self.QUESTIONNAIRE_TAG_CAPACITY.get(str(questionnaire_id), 1)
 
     @staticmethod
     def _assignment_context(
