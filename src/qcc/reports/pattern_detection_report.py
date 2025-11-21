@@ -453,40 +453,62 @@ class PatternDetectionReport:
     def _available_tags_for_assignments(
         self, assignments: Sequence[TagAssignment]
     ) -> int:
-        comment_questionnaires: Dict[str, tuple[Optional[str], Optional[str]]] = {}
+        user_comment_questionnaires: Dict[str, Dict[str, Optional[str]]] = {}
 
         for assignment in assignments:
+            user_id = getattr(assignment, "tagger_id", None)
+            if user_id in (None, ""):
+                continue
+
             comment_id = getattr(assignment, "comment_id", None)
             if comment_id in (None, ""):
                 continue
 
+            user_key = str(user_id)
             comment_key = str(comment_id)
+            user_comment_questionnaires.setdefault(user_key, {})
 
-            if comment_key in comment_questionnaires and comment_questionnaires[comment_key][0]:
+            if (
+                comment_key in user_comment_questionnaires[user_key]
+                and user_comment_questionnaires[user_key][comment_key]
+            ):
                 continue
 
             questionnaire_id = self._questionnaire_id_for_comment(
                 comment_key, assignment
             )
-            if comment_key not in comment_questionnaires or questionnaire_id:
-                comment_questionnaires[comment_key] = (
-                    questionnaire_id,
-                    getattr(assignment, "tagger_id", None),
-                )
 
-        if comment_questionnaires:
+            if (
+                comment_key not in user_comment_questionnaires[user_key]
+                or questionnaire_id is not None
+            ):
+                user_comment_questionnaires[user_key][comment_key] = questionnaire_id
+
+        for user_id, questionnaires in user_comment_questionnaires.items():
+            if not questionnaires:
+                continue
+
             detection_summary = ", ".join(
                 f"questionnaire_id={questionnaire_id or 'missing'} for user {user_id}"
-                for questionnaire_id, user_id in comment_questionnaires.values()
+                for questionnaire_id in questionnaires.values()
             )
             logger.debug(
                 "Detected questionnaires for tag availability: %s", detection_summary
             )
 
-        return sum(
-            self._questionnaire_tag_capacity(questionnaire_id, user_id)
-            for questionnaire_id, user_id in comment_questionnaires.values()
-        )
+        availability_by_user = {
+            user_id: sum(
+                self._questionnaire_tag_capacity(questionnaire_id, user_id)
+                for questionnaire_id in questionnaires.values()
+            )
+            for user_id, questionnaires in user_comment_questionnaires.items()
+        }
+
+        if not assignments:
+            return 0
+
+        primary_user = str(getattr(assignments[0], "tagger_id", ""))
+        return availability_by_user.get(primary_user, 0)
 
     def _questionnaire_id_for_comment(
         self, comment_id: str, assignment: TagAssignment
