@@ -42,6 +42,7 @@ def test_horizontal_assignments_capture_pattern_window():
     assert horizontal[0]["has_repeating_pattern"] is True
     assert horizontal[0]["assignment_id"] == "1205"
     assert horizontal[0]["pattern_coverage_pct"] == 100.0
+    assert horizontal[0]["# Tags Available"] == 12
     assert horizontal[0]["# Tags Set"] == 12
     assert horizontal[0]["# Tags Set in a pattern"] == 12
     assert horizontal[0]["# Comments available to tag"] == 12
@@ -80,6 +81,7 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     assert set(reader[0].keys()) == {
         "tagger_id",
         "assignment_id",
+        "# Tags Available",
         "# Tags Set",
         "# Tags Set in a pattern",
         "# Comments available to tag",
@@ -147,6 +149,38 @@ def test_pattern_coverage_partial_window():
     assert coverage == 66.67
     assert pattern_tag_count == 12
     assert tag_count == 18
+
+
+def test_available_tags_include_skips():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-yes",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-skip",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+        ),
+    ]
+
+    tagger = Tagger(id="worker-1", tagassignments=assignments)
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report([tagger], [])
+    horizontal = data["horizontal"]["assignments"][0]
+
+    assert horizontal["# Tags Available"] == 2
+    # Only the YES/NO tag is eligible for pattern detection
+    assert horizontal["# Tags Set"] == 1
 
 
 def test_csv_rows_sorted_by_user_id(tmp_path):

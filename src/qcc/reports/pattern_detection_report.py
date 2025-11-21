@@ -75,6 +75,7 @@ class PatternDetectionReport:
         fieldnames = [
             "tagger_id",
             "assignment_id",
+            "# Tags Available",
             "# Tags Set",
             "# Tags Set in a pattern",
             "# Comments available to tag",
@@ -239,6 +240,7 @@ class PatternDetectionReport:
             eligible_assignments, windows
         )
         _, seconds_per_tag = self._speed_metrics(eligible_assignments)
+        available_tag_count = len(assignments)
         tag_count = len(eligible_assignments)
         answer_count = len(
             {
@@ -252,6 +254,7 @@ class PatternDetectionReport:
             {
                 "tagger_id": str(first.tagger_id),
                 "assignment_id": assignment_id,
+                "# Tags Available": available_tag_count,
                 "# Tags Set": tag_count,
                 "# Tags Set in a pattern": pattern_tag_count,
                 "# Comments available to tag": answer_count,
@@ -322,6 +325,9 @@ class PatternDetectionReport:
             row: MutableMapping[str, str] = {
                 "tagger_id": str(assignment.get("tagger_id", "")),
                 "assignment_id": str(assignment.get("assignment_id", "") or ""),
+                "# Tags Available": str(
+                    assignment.get("# Tags Available", "") or ""
+                ),
                 "# Tags Set": str(assignment.get("# Tags Set", "") or ""),
                 "# Tags Set in a pattern": str(
                     assignment.get("# Tags Set in a pattern", "") or ""

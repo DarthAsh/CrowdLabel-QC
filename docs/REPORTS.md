@@ -106,7 +106,8 @@ an `assignment_id`). Only assignment `1205` is emitted in the report. In
 addition to the detected patterns, each assignment row reports what percentage
 of its timestamped YES/NO tags belong to a detected pattern window, how many
 tags land inside patterns, the total tags examined, how many answers were
-tagged in the assignment, and the tagging speed metrics for that assignment.
+tagged in the assignment, how many answer tags were present overall, and the
+tagging speed metrics for that assignment.
 
 The report returns a single entry for every tagger/assignment pair with the
 assignment identifiers and pattern(s) found when scanning that assignment's
@@ -138,6 +139,9 @@ and the pattern/speed columns are emitted.
 
 - `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
   assignment `1205` rows are written.
+- `# Tags Available` – total number of answer tags present for the
+  tagger/assignment pair, including those tagged as `0`/`SKIP` or other values
+  outside the YES/NO set used for pattern detection.
 - `# Tags Set` – number of eligible timestamped YES/NO tags examined for the
   tagger/assignment pair (the input to pattern detection).
 - `# Tags Set in a pattern` – count of those eligible tags that fell within at
