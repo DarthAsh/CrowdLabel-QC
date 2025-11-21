@@ -327,6 +327,12 @@ class PatternDetectionReport:
         assignments: Iterable[Mapping[str, object]],
     ) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
+
+        def _stringify(value: object) -> str:
+            if value is None:
+                return ""
+            return str(value)
+
         for assignment in assignments:
             if not isinstance(assignment, Mapping):
                 logger.warning(
@@ -336,25 +342,25 @@ class PatternDetectionReport:
             patterns = assignment.get("detected_patterns", []) or []
             pattern_str = ";".join(patterns) if patterns else ""
             row: MutableMapping[str, str] = {
-                "tagger_id": str(assignment.get("tagger_id", "")),
-                "assignment_id": str(assignment.get("assignment_id", "") or ""),
-                "# Tags Available": str(
-                    assignment.get("# Tags Available", "") or ""
+                "tagger_id": _stringify(assignment.get("tagger_id", "")),
+                "assignment_id": _stringify(assignment.get("assignment_id", "")),
+                "# Tags Available": _stringify(
+                    assignment.get("# Tags Available", "")
                 ),
-                "# Tags Set": str(assignment.get("# Tags Set", "") or ""),
-                "# Tags Set in a pattern": str(
-                    assignment.get("# Tags Set in a pattern", "") or ""
+                "# Tags Set": _stringify(assignment.get("# Tags Set", "")),
+                "# Tags Set in a pattern": _stringify(
+                    assignment.get("# Tags Set in a pattern", "")
                 ),
-                "# Comments available to tag": str(
-                    assignment.get("# Comments available to tag", "") or ""
+                "# Comments available to tag": _stringify(
+                    assignment.get("# Comments available to tag", "")
                 ),
                 "detected_patterns": pattern_str,
                 "has_repeating_pattern": str(bool(patterns)).lower(),
-                "pattern_coverage_pct": str(
-                    assignment.get("pattern_coverage_pct", "") or ""
+                "pattern_coverage_pct": _stringify(
+                    assignment.get("pattern_coverage_pct", "")
                 ),
-                "trimmed_seconds_per_tag": str(
-                    assignment.get("trimmed_seconds_per_tag", "") or ""
+                "trimmed_seconds_per_tag": _stringify(
+                    assignment.get("trimmed_seconds_per_tag", "")
                 ),
             }
 

@@ -141,6 +141,22 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
     assert len(rows) == 1
 
 
+def test_csv_export_shows_zero_tag_availability(tmp_path):
+    assignments = _build_uniform_yes_assignments(questionnaire_id="999")
+    tagger = Tagger(id="worker-0", tagassignments=assignments)
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report([tagger], [])
+    csv_path = tmp_path / "zero-availability.csv"
+    report.export_to_csv(data, csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    assert len(rows) == 1
+    assert rows[0]["# Tags Available"] == "0"
+
+
 def test_pattern_coverage_partial_window():
     base_assignments = _build_uniform_yes_assignments(count=18, questionnaire_id="753")
     tagger = Tagger(id="worker-1", tagassignments=base_assignments)
