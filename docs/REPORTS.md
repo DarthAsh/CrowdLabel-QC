@@ -62,12 +62,6 @@ copy-paste behavior or inattentive labeling.
   the uniform sequences `YYYY` and `NNNN`, but any 3–4 token pattern qualifies
   if it fills the entire window.
 
-Two perspectives are provided:
-
-* `horizontal`: analyzes the full chronological sequence for each tagger.
-* `vertical`: aggregates patterns within each characteristic separately and
-  merges the counts for a tagger.
-
 The report also emits the list of tracked patterns from
 `PatternCollection.return_all_patterns()` so downstream consumers know the
 canonical ordering.
@@ -106,26 +100,25 @@ for partial reports.
 ## Assignment pattern detection report
 
 `PatternDetectionReport` produces assignment-level outputs for pattern detection
-so you can trace the signals back to individual assignments. It reuses the
-horizontal and vertical perspectives, but pattern detection always runs within
-each tagger's individual assignment (all answer tags sharing an
-`assignment_id`). Only assignment `1205` is emitted in the report. In addition
-to the detected patterns, each assignment row reports what percentage of its
-timestamped YES/NO tags belong to a detected pattern window, how many tags land
-inside patterns, the total tags examined, how many answers were tagged in the
-assignment, and the tagging speed metrics for that assignment.
+so you can trace the signals back to individual assignments. Pattern detection
+always runs within each tagger's individual assignment (all answer tags sharing
+an `assignment_id`). Only assignment `1205` is emitted in the report. In
+addition to the detected patterns, each assignment row reports what percentage
+of its timestamped YES/NO tags belong to a detected pattern window, how many
+tags land inside patterns, the total tags examined, how many answers were
+tagged in the assignment, how many answer tags were present overall, and the
+tagging speed metrics for that assignment.
 
-The report returns a single entry for every tagger/assignment pair with
-metadata (`assignment_id`, `comment_id`, `prompt_id`, `timestamp`) plus the
-pattern(s) found when scanning that assignment's answer tags. Patterns are
-detected in 12-assignment windows using the same 3- and 4-token repeat logic as
-`TaggerPerformanceReport`.
+The report returns a single entry for every tagger/assignment pair with the
+assignment identifiers and pattern(s) found when scanning that assignment's
+answer tags. Patterns are detected in 12-assignment windows using the same 3-
+and 4-token repeat logic as `TaggerPerformanceReport`.
 
-CSV exports include one row per assignment per perspective with a semicolon-
-delimited `patterns` column (empty when no patterns were detected) and a
-boolean `pattern_detected` column for quick filtering. Only `user_id`,
-`assignment_id`, `comment_id`, `prompt_id`, `timestamp`, `perspective`, tag and
-answer counts, and the pattern/speed columns are emitted.
+CSV exports include one row per assignment with a semicolon-delimited
+`detected_patterns` column (empty when no patterns were detected) and a boolean
+`has_repeating_pattern` column for quick filtering. Only `tagger_id`,
+`assignment_id`, first-comment/prompt/timestamp metadata, tag and answer counts,
+and the pattern/speed columns are emitted.
 
 ### How patterns are detected and attached
 
@@ -139,35 +132,35 @@ answer counts, and the pattern/speed columns are emitted.
   token matching to avoid double-counting.
 - **Annotation:** When a window hits, the assignment is marked with the literal
   repeated pattern (for example, `YYYY`, `NNNN`, or `YYNN`), and
-  `pattern_detected` is set to `true` for that tagger/assignment pair. An
+  `has_repeating_pattern` is set to `true` for that tagger/assignment pair. An
   assignment can accrue multiple pattern labels if multiple windows match.
 
 ### CSV column reference
 
-- `user_id`, `assignment_id`, `comment_id`, `prompt_id` – identifiers copied
-  directly from the enriched `TagAssignment`. Only assignment `1205` rows are
-  written.
-- `timestamp` – the earliest timestamp among the assignment's eligible tags.
-- `perspective` – either `horizontal` (full tagger sequence grouped by
-  assignment) or `vertical` (per characteristic, then merged per tagger, still
-  grouped by assignment).
-- `tag_count` – number of eligible timestamped YES/NO tags examined for the
-  user/assignment pair.
-- `pattern_tag_count` – count of those eligible tags that fell within at least
-  one detected pattern window.
-- `answer_count` – number of distinct answers (comment IDs) tagged by the user
-  for the assignment.
-- `patterns` – semicolon-delimited list of patterns that hit within the
-  assignment for that perspective; empty when no pattern was detected for that
-  row.
-- `pattern_detected` – `true` when any pattern was found for that assignment and
-  perspective, else `false`.
-- `pattern_coverage` – percentage (0–100, rounded to two decimal places) of the
-  assignment's eligible tags that fell inside one or more detected pattern
+- `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
+  assignment `1205` rows are written.
+- `# Tags Available` – maximum possible tags for the tagger/assignment pair,
+  summed once per distinct answered comment. For each comment, its
+  `question_id` is resolved to a questionnaire, and only questionnaires `753`
+  (2 tags per answer) and `754` (1 tag per answer) contribute to this total;
+  answers tied to other questionnaires are ignored. Skipped answers still
+  contribute to this availability total when their questionnaire is counted,
+  even though they are ineligible for pattern detection.
+- `# Tags Set` – number of eligible timestamped YES/NO tags examined for the
+  tagger/assignment pair (the input to pattern detection).
+- `# Tags Set in a pattern` – count of those eligible tags that fell within at
+  least one detected pattern window.
+- `# Comments available to tag` – number of distinct answers (comment IDs)
+  tagged by the user for the assignment.
+- `detected_patterns` – semicolon-delimited list of patterns that hit within the
+  assignment; empty when no pattern was detected for that row.
+- `has_repeating_pattern` – `true` when any pattern was found for that
+  assignment, else `false`.
+- `pattern_coverage_pct` – percentage (0–100, rounded to two decimal places) of
+  the assignment's eligible tags that fell inside one or more detected pattern
   windows.
-- `speed_mean_log2`, `speed_seconds_per_tag` – the log2-mean interval between
-  tags and its seconds-per-tag conversion, computed from the assignment's
-  eligible tags.
+- `trimmed_seconds_per_tag` – seconds-per-tag using the log-trimmed mean
+  computed from the assignment's eligible tags.
 
 Use the CSV export to trace any flagged pattern back to the exact assignment and
 context that produced it.

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
@@ -26,9 +25,18 @@ class PatternDetectionReport:
     """Generate per-assignment pattern detection results."""
 
     TARGET_ASSIGNMENT_ID = "1205"
+    QUESTIONNAIRE_TAG_CAPACITY = {"753": 2, "754": 1}
+    DEFAULT_TAG_CAPACITY = 1
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
+        self._questionnaire_by_question: Dict[str, str] = {
+            str(getattr(assignment, "question_id")):
+            str(getattr(assignment, "questionnaire_id"))
+            for assignment in self.assignments
+            if getattr(assignment, "question_id", None) not in (None, "")
+            and getattr(assignment, "questionnaire_id", None) not in (None, "")
+        }
 
     def generate_assignment_report(
         self,
@@ -44,14 +52,11 @@ class PatternDetectionReport:
         )
 
         horizontal_strategy = HorizontalPatternDetection()
-        vertical_strategy = VerticalPatternDetection()
 
         horizontal_assignments = self._build_horizontal_results(
             taggers, horizontal_strategy
         )
-        vertical_assignments = self._build_vertical_results(
-            taggers, characteristics, vertical_strategy
-        )
+        vertical_assignments: List[Dict[str, object]] = []
 
         logger.info(
             "Finished pattern detection aggregation: %s horizontal rows, %s vertical characteristic groups",
@@ -66,7 +71,7 @@ class PatternDetectionReport:
                 "assignments": horizontal_assignments,
             },
             "vertical": {
-                "strategy": vertical_strategy.__class__.__name__,
+                "strategy": VerticalPatternDetection.__name__,
                 "per_characteristic": vertical_assignments,
             },
         }
@@ -77,20 +82,16 @@ class PatternDetectionReport:
         csv_path = Path(output_path)
         rows = self._build_csv_rows(report_data)
         fieldnames = [
-            "user_id",
+            "tagger_id",
             "assignment_id",
-            "comment_id",
-            "prompt_id",
-            "timestamp",
-            "perspective",
-            "tag_count",
-            "pattern_tag_count",
-            "answer_count",
-            "patterns",
-            "pattern_detected",
-            "pattern_coverage",
-            "speed_mean_log2",
-            "speed_seconds_per_tag",
+            "# Tags Available",
+            "# Tags Set",
+            "# Tags Set in a pattern",
+            "# Comments available to tag",
+            "detected_patterns",
+            "has_repeating_pattern",
+            "pattern_coverage_pct",
+            "trimmed_seconds_per_tag",
         ]
 
         with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
@@ -243,12 +244,12 @@ class PatternDetectionReport:
             return []
 
         first = assignments[0]
-        timestamp = getattr(first, "timestamp", None)
         patterns = sorted({pattern for _, pattern in windows})
         coverage, pattern_tag_count = self._pattern_coverage_stats(
             eligible_assignments, windows
         )
-        mean_log2, seconds_per_tag = self._speed_metrics(eligible_assignments)
+        _, seconds_per_tag = self._speed_metrics(eligible_assignments)
+        available_tag_count = self._available_tags_for_assignments(assignments)
         tag_count = len(eligible_assignments)
         answer_count = len(
             {
@@ -262,17 +263,14 @@ class PatternDetectionReport:
             {
                 "tagger_id": str(first.tagger_id),
                 "assignment_id": assignment_id,
-                "comment_id": getattr(first, "comment_id", None),
-                "prompt_id": getattr(first, "prompt_id", None),
-                "timestamp": self._timestamp_str(timestamp),
-                "tag_count": tag_count,
-                "pattern_tag_count": pattern_tag_count,
-                "answer_count": answer_count,
-                "patterns": patterns,
-                "pattern_detected": bool(patterns),
-                "pattern_coverage": coverage,
-                "speed_mean_log2": mean_log2,
-                "speed_seconds_per_tag": seconds_per_tag,
+                "# Tags Available": available_tag_count,
+                "# Tags Set": tag_count,
+                "# Tags Set in a pattern": pattern_tag_count,
+                "# Comments available to tag": answer_count,
+                "detected_patterns": patterns,
+                "has_repeating_pattern": bool(patterns),
+                "pattern_coverage_pct": coverage,
+                "trimmed_seconds_per_tag": seconds_per_tag,
             }
         ]
 
@@ -303,15 +301,13 @@ class PatternDetectionReport:
 
     def _build_csv_rows(self, report_data: Mapping[str, object]) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
-        seen_keys: set[tuple[str, str, str]] = set()
+        seen_keys: set[tuple[str, str]] = set()
 
         horizontal = report_data.get("horizontal") if isinstance(report_data, Mapping) else None
         if isinstance(horizontal, Mapping):
             assignments = horizontal.get("assignments", []) or []
-            for row in self._rows_from_assignments(
-                assignments, perspective="horizontal"
-            ):
-                key = (row.get("user_id", ""), row.get("assignment_id", ""), "horizontal")
+            for row in self._rows_from_assignments(assignments):
+                key = (row.get("tagger_id", ""), row.get("assignment_id", ""))
                 if key in seen_keys:
                     logger.debug(
                         "Skipping duplicate horizontal row for %s", key
@@ -320,69 +316,53 @@ class PatternDetectionReport:
                 seen_keys.add(key)
                 rows.append(row)
 
-        vertical = report_data.get("vertical") if isinstance(report_data, Mapping) else None
-        if isinstance(vertical, Mapping):
-            per_characteristic = vertical.get("per_characteristic", []) or []
-            for characteristic_entry in per_characteristic:
-                if not isinstance(characteristic_entry, Mapping):
-                    continue
-                assignments = characteristic_entry.get("assignments", []) or []
-                for row in self._rows_from_assignments(
-                    assignments,
-                    perspective="vertical",
-                    characteristic_id=str(characteristic_entry.get("characteristic_id", "")),
-                ):
-                    key = (row.get("user_id", ""), row.get("assignment_id", ""), "vertical")
-                    if key in seen_keys:
-                        logger.debug(
-                            "Skipping duplicate vertical row for %s", key
-                        )
-                        continue
-                    seen_keys.add(key)
-                    rows.append(row)
-
-        return sorted(rows, key=lambda row: row.get("user_id", ""))
+        return sorted(rows, key=lambda row: row.get("tagger_id", ""))
 
     def _rows_from_assignments(
         self,
         assignments: Iterable[Mapping[str, object]],
-        *,
-        perspective: str,
-        characteristic_id: Optional[str] = None,
     ) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
+
+        def _stringify(value: object) -> str:
+            if value is None:
+                return ""
+            return str(value)
+
         for assignment in assignments:
             if not isinstance(assignment, Mapping):
                 logger.warning(
                     "Skipping non-mapping assignment entry: %s", assignment
                 )
                 continue
-            patterns = assignment.get("patterns", []) or []
+            patterns = assignment.get("detected_patterns", []) or []
             pattern_str = ";".join(patterns) if patterns else ""
             row: MutableMapping[str, str] = {
-                "user_id": str(assignment.get("tagger_id", "")),
-                "assignment_id": str(assignment.get("assignment_id", "") or ""),
-                "comment_id": str(assignment.get("comment_id", "") or ""),
-                "prompt_id": str(assignment.get("prompt_id", "") or ""),
-                "timestamp": str(assignment.get("timestamp", "") or ""),
-                "perspective": perspective,
-                "tag_count": str(assignment.get("tag_count", "") or ""),
-                "pattern_tag_count": str(
-                    assignment.get("pattern_tag_count", "") or ""
+                "tagger_id": _stringify(assignment.get("tagger_id", "")),
+                "assignment_id": _stringify(assignment.get("assignment_id", "")),
+                "# Tags Available": _stringify(
+                    assignment.get("# Tags Available", "")
                 ),
-                "answer_count": str(assignment.get("answer_count", "") or ""),
-                "patterns": pattern_str,
-                "pattern_detected": str(bool(patterns)).lower(),
-                "pattern_coverage": str(assignment.get("pattern_coverage", "") or ""),
-                "speed_mean_log2": str(assignment.get("speed_mean_log2", "") or ""),
-                "speed_seconds_per_tag": str(
-                    assignment.get("speed_seconds_per_tag", "") or ""
+                "# Tags Set": _stringify(assignment.get("# Tags Set", "")),
+                "# Tags Set in a pattern": _stringify(
+                    assignment.get("# Tags Set in a pattern", "")
+                ),
+                "# Comments available to tag": _stringify(
+                    assignment.get("# Comments available to tag", "")
+                ),
+                "detected_patterns": pattern_str,
+                "has_repeating_pattern": str(bool(patterns)).lower(),
+                "pattern_coverage_pct": _stringify(
+                    assignment.get("pattern_coverage_pct", "")
+                ),
+                "trimmed_seconds_per_tag": _stringify(
+                    assignment.get("trimmed_seconds_per_tag", "")
                 ),
             }
 
-            if not row["user_id"] or not row["assignment_id"]:
+            if not row["tagger_id"] or not row["assignment_id"]:
                 logger.warning(
-                    "Skipping row missing required identifiers user_id/assignment_id: %s",
+                    "Skipping row missing required identifiers tagger_id/assignment_id: %s",
                     row,
                 )
                 continue
@@ -391,9 +371,9 @@ class PatternDetectionReport:
 
         return rows
 
-    @staticmethod
+    @classmethod
     def _eligible_assignments(
-        assignments: Iterable[TagAssignment],
+        cls, assignments: Iterable[TagAssignment],
     ) -> List[TagAssignment]:
         eligible: List[TagAssignment] = []
         for assignment in assignments:
@@ -402,16 +382,12 @@ class PatternDetectionReport:
             if timestamp is None or value not in (TagValue.YES, TagValue.NO):
                 logger.debug(
                     "Skipping ineligible assignment for pattern detection: %s",
-                    self._assignment_context(assignment),
+                    cls._assignment_context(assignment),
                 )
                 continue
             eligible.append(assignment)
 
         return sorted(eligible, key=lambda assignment: assignment.timestamp)
-
-    @staticmethod
-    def _timestamp_str(timestamp: Optional[datetime]) -> str:
-        return timestamp.isoformat() if isinstance(timestamp, datetime) else ""
 
     @staticmethod
     def _pattern_coverage_stats(
@@ -441,6 +417,65 @@ class PatternDetectionReport:
         mean_log2 = strategy.speed_log2(tagger)
         seconds = strategy.seconds_per_tag(mean_log2)
         return round(mean_log2, 6), round(seconds, 6)
+
+    def _questionnaire_tag_capacity(self, questionnaire_id: Optional[str]) -> int:
+        if questionnaire_id in (None, ""):
+            logger.warning(
+                "Missing questionnaire_id when computing tag availability; defaulting to %s",
+                self.DEFAULT_TAG_CAPACITY,
+            )
+            return self.DEFAULT_TAG_CAPACITY
+
+        questionnaire_id_str = str(questionnaire_id)
+        capacity = self.QUESTIONNAIRE_TAG_CAPACITY.get(questionnaire_id_str)
+        if capacity is None:
+            logger.warning(
+                "Unknown questionnaire_id %s when computing tag availability; defaulting to %s",
+                questionnaire_id_str,
+                self.DEFAULT_TAG_CAPACITY,
+            )
+            return self.DEFAULT_TAG_CAPACITY
+
+        return capacity
+
+    def _available_tags_for_assignments(
+        self, assignments: Sequence[TagAssignment]
+    ) -> int:
+        comment_questionnaires: Dict[str, Optional[str]] = {}
+
+        for assignment in assignments:
+            comment_id = getattr(assignment, "comment_id", None)
+            if comment_id in (None, ""):
+                continue
+
+            comment_key = str(comment_id)
+
+            if comment_key in comment_questionnaires and comment_questionnaires[comment_key]:
+                continue
+
+            questionnaire_id = self._questionnaire_id_for_assignment(assignment)
+            if comment_key not in comment_questionnaires or questionnaire_id:
+                comment_questionnaires[comment_key] = questionnaire_id
+
+        return sum(
+            self._questionnaire_tag_capacity(questionnaire_id)
+            for questionnaire_id in comment_questionnaires.values()
+        )
+
+    def _questionnaire_id_for_assignment(
+        self, assignment: TagAssignment
+    ) -> Optional[str]:
+        question_id = getattr(assignment, "question_id", None)
+        if question_id not in (None, ""):
+            questionnaire_id = self._questionnaire_by_question.get(str(question_id))
+            if questionnaire_id not in (None, ""):
+                return questionnaire_id
+
+        questionnaire_id = getattr(assignment, "questionnaire_id", None)
+        if questionnaire_id in (None, ""):
+            return None
+
+        return str(questionnaire_id)
 
     @staticmethod
     def _assignment_context(

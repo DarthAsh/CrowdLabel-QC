@@ -400,7 +400,7 @@ def _read_domain_objects(
         mysql_config = _build_mysql_config(input_config)
         adapter = DBAdapter(mysql_config)
         source = input_config.mysql.dsn or mysql_config.host
-        return adapter.read_domain_objects(), source or "mysql"
+        return adapter.read_domain_objects_from_questionnaires(), source or "mysql"
 
     raise ValueError(f"Unsupported input format: {input_config.format}")
 
