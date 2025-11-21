@@ -26,6 +26,7 @@ class PatternDetectionReport:
 
     TARGET_ASSIGNMENT_ID = "1205"
     QUESTIONNAIRE_TAG_CAPACITY = {"753": 2, "754": 1}
+    DEFAULT_TAG_CAPACITY = 1
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
@@ -417,16 +418,35 @@ class PatternDetectionReport:
         seconds = strategy.seconds_per_tag(mean_log2)
         return round(mean_log2, 6), round(seconds, 6)
 
-    def _questionnaire_tag_capacity(self, questionnaire_id: Optional[str]) -> int:
+    def _questionnaire_tag_capacity(
+        self, questionnaire_id: Optional[str], user_id: Optional[str] = None
+    ) -> int:
+        user_context = f" for user {user_id}" if user_id not in (None, "") else ""
         if questionnaire_id in (None, ""):
-            return 0
+            logger.warning(
+                "Missing questionnaire_id when computing tag availability%s; defaulting to %s",
+                user_context,
+                self.DEFAULT_TAG_CAPACITY,
+            )
+            return self.DEFAULT_TAG_CAPACITY
 
-        return self.QUESTIONNAIRE_TAG_CAPACITY.get(str(questionnaire_id), 0)
+        questionnaire_id_str = str(questionnaire_id)
+        capacity = self.QUESTIONNAIRE_TAG_CAPACITY.get(questionnaire_id_str)
+        if capacity is None:
+            logger.warning(
+                "Unknown questionnaire_id %s when computing tag availability%s; defaulting to %s",
+                questionnaire_id_str,
+                user_context,
+                self.DEFAULT_TAG_CAPACITY,
+            )
+            return self.DEFAULT_TAG_CAPACITY
+
+        return capacity
 
     def _available_tags_for_assignments(
         self, assignments: Sequence[TagAssignment]
     ) -> int:
-        comment_questionnaires: Dict[str, Optional[str]] = {}
+        comment_questionnaires: Dict[str, tuple[Optional[str], Optional[str]]] = {}
 
         for assignment in assignments:
             comment_id = getattr(assignment, "comment_id", None)
@@ -435,16 +455,19 @@ class PatternDetectionReport:
 
             comment_key = str(comment_id)
 
-            if comment_key in comment_questionnaires and comment_questionnaires[comment_key]:
+            if comment_key in comment_questionnaires and comment_questionnaires[comment_key][0]:
                 continue
 
             questionnaire_id = self._questionnaire_id_for_assignment(assignment)
             if comment_key not in comment_questionnaires or questionnaire_id:
-                comment_questionnaires[comment_key] = questionnaire_id
+                comment_questionnaires[comment_key] = (
+                    questionnaire_id,
+                    getattr(assignment, "tagger_id", None),
+                )
 
         return sum(
-            self._questionnaire_tag_capacity(questionnaire_id)
-            for questionnaire_id in comment_questionnaires.values()
+            self._questionnaire_tag_capacity(questionnaire_id, user_id)
+            for questionnaire_id, user_id in comment_questionnaires.values()
         )
 
     def _questionnaire_id_for_assignment(
