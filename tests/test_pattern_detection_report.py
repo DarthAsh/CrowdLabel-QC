@@ -11,7 +11,9 @@ from qcc.domain.tagger import Tagger
 from qcc.reports.pattern_detection_report import PatternDetectionReport
 
 
-def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "1205") -> list[TagAssignment]:
+def _build_uniform_yes_assignments(
+    count: int = 12, assignment_id: str = "1205", questionnaire_id: str | None = None
+) -> list[TagAssignment]:
     start = datetime(2024, 1, 1, 0, 0, 0)
     assignments = []
     for i in range(count):
@@ -23,6 +25,7 @@ def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "1205")
                 value=TagValue.YES,
                 timestamp=start + timedelta(seconds=i),
                 assignment_id=assignment_id,
+                questionnaire_id=questionnaire_id,
             )
         )
 
@@ -30,7 +33,7 @@ def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "1205")
 
 
 def test_horizontal_assignments_capture_pattern_window():
-    assignments = _build_uniform_yes_assignments()
+    assignments = _build_uniform_yes_assignments(questionnaire_id="753")
     tagger = Tagger(id="worker-1", tagassignments=assignments)
     report = PatternDetectionReport(assignments)
 
@@ -42,7 +45,7 @@ def test_horizontal_assignments_capture_pattern_window():
     assert horizontal[0]["has_repeating_pattern"] is True
     assert horizontal[0]["assignment_id"] == "1205"
     assert horizontal[0]["pattern_coverage_pct"] == 100.0
-    assert horizontal[0]["# Tags Available"] == 12
+    assert horizontal[0]["# Tags Available"] == 24
     assert horizontal[0]["# Tags Set"] == 12
     assert horizontal[0]["# Tags Set in a pattern"] == 12
     assert horizontal[0]["# Comments available to tag"] == 12
@@ -62,7 +65,7 @@ def test_vertical_assignments_filtered_by_characteristic():
 
 
 def test_csv_export_writes_all_assignment_rows(tmp_path):
-    assignments = _build_uniform_yes_assignments()
+    assignments = _build_uniform_yes_assignments(questionnaire_id="753")
     tagger = Tagger(id="worker-1", tagassignments=assignments)
     characteristic = Characteristic(id="char-1", name="Characteristic One")
     report = PatternDetectionReport(assignments)
@@ -105,6 +108,7 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
                 value=TagValue.YES,
                 timestamp=start + timedelta(seconds=i),
                 assignment_id="1205",
+                questionnaire_id="753",
             )
         )
         assignments.append(
@@ -115,6 +119,7 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
                 value=TagValue.YES,
                 timestamp=start + timedelta(seconds=i + 12),
                 assignment_id="1205",
+                questionnaire_id="753",
             )
         )
 
@@ -137,7 +142,7 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
 
 
 def test_pattern_coverage_partial_window():
-    base_assignments = _build_uniform_yes_assignments(count=18)
+    base_assignments = _build_uniform_yes_assignments(count=18, questionnaire_id="753")
     tagger = Tagger(id="worker-1", tagassignments=base_assignments)
     report = PatternDetectionReport(base_assignments)
 
@@ -161,6 +166,7 @@ def test_available_tags_include_skips():
             value=TagValue.YES,
             timestamp=start,
             assignment_id="1205",
+            questionnaire_id="754",
         ),
         TagAssignment(
             tagger_id="worker-1",
@@ -169,6 +175,7 @@ def test_available_tags_include_skips():
             value=TagValue.SKIP,
             timestamp=start + timedelta(seconds=1),
             assignment_id="1205",
+            questionnaire_id="754",
         ),
     ]
 
@@ -213,6 +220,15 @@ def test_tags_available_uses_questionnaire_capacity():
             assignment_id="1205",
             questionnaire_id="754",
         ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-other",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=3),
+            assignment_id="1205",
+            questionnaire_id="9999",
+        ),
     ]
 
     report = PatternDetectionReport(assignments)
@@ -222,7 +238,7 @@ def test_tags_available_uses_questionnaire_capacity():
     # questionnaire_id 753 allows 2 tags per answer and 754 allows 1
     assert horizontal["# Tags Available"] == 5
     assert horizontal["# Tags Set"] == 2
-    assert horizontal["# Comments available to tag"] == 3
+    assert horizontal["# Comments available to tag"] == 4
 
 
 def test_csv_rows_sorted_by_user_id(tmp_path):

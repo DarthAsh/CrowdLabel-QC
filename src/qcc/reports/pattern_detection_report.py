@@ -411,9 +411,9 @@ class PatternDetectionReport:
 
     def _questionnaire_tag_capacity(self, questionnaire_id: Optional[str]) -> int:
         if questionnaire_id in (None, ""):
-            return 1
+            return 0
 
-        return self.QUESTIONNAIRE_TAG_CAPACITY.get(str(questionnaire_id), 1)
+        return self.QUESTIONNAIRE_TAG_CAPACITY.get(str(questionnaire_id), 0)
 
     @staticmethod
     def _assignment_context(
