@@ -75,9 +75,9 @@ class PatternDetectionReport:
         fieldnames = [
             "tagger_id",
             "assignment_id",
-            "eligible_tag_count",
-            "tags_in_pattern_count",
-            "distinct_answer_count",
+            "# Tags Set",
+            "# Tags Set in a pattern",
+            "# Comments available to tag",
             "detected_patterns",
             "has_repeating_pattern",
             "pattern_coverage_pct",
@@ -252,9 +252,9 @@ class PatternDetectionReport:
             {
                 "tagger_id": str(first.tagger_id),
                 "assignment_id": assignment_id,
-                "eligible_tag_count": tag_count,
-                "tags_in_pattern_count": pattern_tag_count,
-                "distinct_answer_count": answer_count,
+                "# Tags Set": tag_count,
+                "# Tags Set in a pattern": pattern_tag_count,
+                "# Comments available to tag": answer_count,
                 "detected_patterns": patterns,
                 "has_repeating_pattern": bool(patterns),
                 "pattern_coverage_pct": coverage,
@@ -322,14 +322,12 @@ class PatternDetectionReport:
             row: MutableMapping[str, str] = {
                 "tagger_id": str(assignment.get("tagger_id", "")),
                 "assignment_id": str(assignment.get("assignment_id", "") or ""),
-                "eligible_tag_count": str(
-                    assignment.get("eligible_tag_count", "") or ""
+                "# Tags Set": str(assignment.get("# Tags Set", "") or ""),
+                "# Tags Set in a pattern": str(
+                    assignment.get("# Tags Set in a pattern", "") or ""
                 ),
-                "tags_in_pattern_count": str(
-                    assignment.get("tags_in_pattern_count", "") or ""
-                ),
-                "distinct_answer_count": str(
-                    assignment.get("distinct_answer_count", "") or ""
+                "# Comments available to tag": str(
+                    assignment.get("# Comments available to tag", "") or ""
                 ),
                 "detected_patterns": pattern_str,
                 "has_repeating_pattern": str(bool(patterns)).lower(),

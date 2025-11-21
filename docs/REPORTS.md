@@ -138,12 +138,12 @@ and the pattern/speed columns are emitted.
 
 - `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
   assignment `1205` rows are written.
-- `eligible_tag_count` – number of eligible timestamped YES/NO tags examined for
-  the tagger/assignment pair (the input to pattern detection).
-- `tags_in_pattern_count` – count of those eligible tags that fell within at
+- `# Tags Set` – number of eligible timestamped YES/NO tags examined for the
+  tagger/assignment pair (the input to pattern detection).
+- `# Tags Set in a pattern` – count of those eligible tags that fell within at
   least one detected pattern window.
-- `distinct_answer_count` – number of distinct answers (comment IDs) tagged by
-  the user for the assignment.
+- `# Comments available to tag` – number of distinct answers (comment IDs)
+  tagged by the user for the assignment.
 - `detected_patterns` – semicolon-delimited list of patterns that hit within the
   assignment; empty when no pattern was detected for that row.
 - `has_repeating_pattern` – `true` when any pattern was found for that

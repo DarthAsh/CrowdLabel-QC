@@ -42,9 +42,9 @@ def test_horizontal_assignments_capture_pattern_window():
     assert horizontal[0]["has_repeating_pattern"] is True
     assert horizontal[0]["assignment_id"] == "1205"
     assert horizontal[0]["pattern_coverage_pct"] == 100.0
-    assert horizontal[0]["eligible_tag_count"] == 12
-    assert horizontal[0]["tags_in_pattern_count"] == 12
-    assert horizontal[0]["distinct_answer_count"] == 12
+    assert horizontal[0]["# Tags Set"] == 12
+    assert horizontal[0]["# Tags Set in a pattern"] == 12
+    assert horizontal[0]["# Comments available to tag"] == 12
     assert horizontal[0]["trimmed_seconds_per_tag"] == 1.0
 
 
@@ -80,9 +80,9 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     assert set(reader[0].keys()) == {
         "tagger_id",
         "assignment_id",
-        "eligible_tag_count",
-        "tags_in_pattern_count",
-        "distinct_answer_count",
+        "# Tags Set",
+        "# Tags Set in a pattern",
+        "# Comments available to tag",
         "detected_patterns",
         "has_repeating_pattern",
         "pattern_coverage_pct",
@@ -141,8 +141,8 @@ def test_pattern_coverage_partial_window():
 
     data = report.generate_assignment_report([tagger], [])
     coverage = data["horizontal"]["assignments"][0]["pattern_coverage_pct"]
-    pattern_tag_count = data["horizontal"]["assignments"][0]["tags_in_pattern_count"]
-    tag_count = data["horizontal"]["assignments"][0]["eligible_tag_count"]
+    pattern_tag_count = data["horizontal"]["assignments"][0]["# Tags Set in a pattern"]
+    tag_count = data["horizontal"]["assignments"][0]["# Tags Set"]
 
     assert coverage == 66.67
     assert pattern_tag_count == 12
