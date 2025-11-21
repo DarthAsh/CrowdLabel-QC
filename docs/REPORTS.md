@@ -106,13 +106,13 @@ an `assignment_id`). Only assignment `1205` is emitted in the report. In
 addition to the detected patterns, each assignment row reports what percentage
 of its timestamped YES/NO tags belong to a detected pattern window, how many
 tags land inside patterns, the total tags examined, how many answers were
-tagged in the assignment, and the tagging speed metrics for that assignment.
+tagged in the assignment, how many answer tags were present overall, and the
+tagging speed metrics for that assignment.
 
-The report returns a single entry for every tagger/assignment pair with
-metadata about the first tag (assignment/tags/group identifiers and earliest
-timestamp) plus the pattern(s) found when scanning that assignment's answer
-tags. Patterns are detected in 12-assignment windows using the same 3- and
-4-token repeat logic as `TaggerPerformanceReport`.
+The report returns a single entry for every tagger/assignment pair with the
+assignment identifiers and pattern(s) found when scanning that assignment's
+answer tags. Patterns are detected in 12-assignment windows using the same 3-
+and 4-token repeat logic as `TaggerPerformanceReport`.
 
 CSV exports include one row per assignment with a semicolon-delimited
 `detected_patterns` column (empty when no patterns were detected) and a boolean
@@ -139,17 +139,19 @@ and the pattern/speed columns are emitted.
 
 - `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
   assignment `1205` rows are written.
-- `first_comment_id`, `first_prompt_id` – the comment and prompt identifiers
-  from the first eligible tag in the assignment, to anchor the row back to the
-  source data. If the prompt is missing in the source data the column is empty.
-- `first_tag_timestamp` – the earliest timestamp among the assignment's
-  eligible tags.
-- `eligible_tag_count` – number of eligible timestamped YES/NO tags examined for
-  the tagger/assignment pair (the input to pattern detection).
-- `tags_in_pattern_count` – count of those eligible tags that fell within at
+- `# Tags Available` – maximum possible tags for the tagger/assignment pair,
+  summed once per distinct answered comment. For each comment, its
+  `question_id` is resolved to a questionnaire, and only questionnaires `753`
+  (2 tags per answer) and `754` (1 tag per answer) contribute to this total;
+  answers tied to other questionnaires are ignored. Skipped answers still
+  contribute to this availability total when their questionnaire is counted,
+  even though they are ineligible for pattern detection.
+- `# Tags Set` – number of eligible timestamped YES/NO tags examined for the
+  tagger/assignment pair (the input to pattern detection).
+- `# Tags Set in a pattern` – count of those eligible tags that fell within at
   least one detected pattern window.
-- `distinct_answer_count` – number of distinct answers (comment IDs) tagged by
-  the user for the assignment.
+- `# Comments available to tag` – number of distinct answers (comment IDs)
+  tagged by the user for the assignment.
 - `detected_patterns` – semicolon-delimited list of patterns that hit within the
   assignment; empty when no pattern was detected for that row.
 - `has_repeating_pattern` – `true` when any pattern was found for that

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
@@ -26,9 +25,17 @@ class PatternDetectionReport:
     """Generate per-assignment pattern detection results."""
 
     TARGET_ASSIGNMENT_ID = "1205"
+    QUESTIONNAIRE_TAG_CAPACITY = {"753": 2, "754": 1}
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
+        self._questionnaire_by_question: Dict[str, str] = {
+            str(getattr(assignment, "question_id")):
+            str(getattr(assignment, "questionnaire_id"))
+            for assignment in self.assignments
+            if getattr(assignment, "question_id", None) not in (None, "")
+            and getattr(assignment, "questionnaire_id", None) not in (None, "")
+        }
 
     def generate_assignment_report(
         self,
@@ -76,12 +83,10 @@ class PatternDetectionReport:
         fieldnames = [
             "tagger_id",
             "assignment_id",
-            "first_comment_id",
-            "first_prompt_id",
-            "first_tag_timestamp",
-            "eligible_tag_count",
-            "tags_in_pattern_count",
-            "distinct_answer_count",
+            "# Tags Available",
+            "# Tags Set",
+            "# Tags Set in a pattern",
+            "# Comments available to tag",
             "detected_patterns",
             "has_repeating_pattern",
             "pattern_coverage_pct",
@@ -238,12 +243,12 @@ class PatternDetectionReport:
             return []
 
         first = assignments[0]
-        timestamp = getattr(first, "timestamp", None)
         patterns = sorted({pattern for _, pattern in windows})
         coverage, pattern_tag_count = self._pattern_coverage_stats(
             eligible_assignments, windows
         )
         _, seconds_per_tag = self._speed_metrics(eligible_assignments)
+        available_tag_count = self._available_tags_for_assignments(assignments)
         tag_count = len(eligible_assignments)
         answer_count = len(
             {
@@ -257,12 +262,10 @@ class PatternDetectionReport:
             {
                 "tagger_id": str(first.tagger_id),
                 "assignment_id": assignment_id,
-                "first_comment_id": getattr(first, "comment_id", None),
-                "first_prompt_id": getattr(first, "prompt_id", None),
-                "first_tag_timestamp": self._timestamp_str(timestamp),
-                "eligible_tag_count": tag_count,
-                "tags_in_pattern_count": pattern_tag_count,
-                "distinct_answer_count": answer_count,
+                "# Tags Available": available_tag_count,
+                "# Tags Set": tag_count,
+                "# Tags Set in a pattern": pattern_tag_count,
+                "# Comments available to tag": answer_count,
                 "detected_patterns": patterns,
                 "has_repeating_pattern": bool(patterns),
                 "pattern_coverage_pct": coverage,
@@ -319,6 +322,12 @@ class PatternDetectionReport:
         assignments: Iterable[Mapping[str, object]],
     ) -> List[Dict[str, str]]:
         rows: List[Dict[str, str]] = []
+
+        def _stringify(value: object) -> str:
+            if value is None:
+                return ""
+            return str(value)
+
         for assignment in assignments:
             if not isinstance(assignment, Mapping):
                 logger.warning(
@@ -328,33 +337,25 @@ class PatternDetectionReport:
             patterns = assignment.get("detected_patterns", []) or []
             pattern_str = ";".join(patterns) if patterns else ""
             row: MutableMapping[str, str] = {
-                "tagger_id": str(assignment.get("tagger_id", "")),
-                "assignment_id": str(assignment.get("assignment_id", "") or ""),
-                "first_comment_id": str(
-                    assignment.get("first_comment_id", "") or ""
+                "tagger_id": _stringify(assignment.get("tagger_id", "")),
+                "assignment_id": _stringify(assignment.get("assignment_id", "")),
+                "# Tags Available": _stringify(
+                    assignment.get("# Tags Available", "")
                 ),
-                "first_prompt_id": str(
-                    assignment.get("first_prompt_id", "") or ""
+                "# Tags Set": _stringify(assignment.get("# Tags Set", "")),
+                "# Tags Set in a pattern": _stringify(
+                    assignment.get("# Tags Set in a pattern", "")
                 ),
-                "first_tag_timestamp": str(
-                    assignment.get("first_tag_timestamp", "") or ""
-                ),
-                "eligible_tag_count": str(
-                    assignment.get("eligible_tag_count", "") or ""
-                ),
-                "tags_in_pattern_count": str(
-                    assignment.get("tags_in_pattern_count", "") or ""
-                ),
-                "distinct_answer_count": str(
-                    assignment.get("distinct_answer_count", "") or ""
+                "# Comments available to tag": _stringify(
+                    assignment.get("# Comments available to tag", "")
                 ),
                 "detected_patterns": pattern_str,
                 "has_repeating_pattern": str(bool(patterns)).lower(),
-                "pattern_coverage_pct": str(
-                    assignment.get("pattern_coverage_pct", "") or ""
+                "pattern_coverage_pct": _stringify(
+                    assignment.get("pattern_coverage_pct", "")
                 ),
-                "trimmed_seconds_per_tag": str(
-                    assignment.get("trimmed_seconds_per_tag", "") or ""
+                "trimmed_seconds_per_tag": _stringify(
+                    assignment.get("trimmed_seconds_per_tag", "")
                 ),
             }
 
@@ -388,10 +389,6 @@ class PatternDetectionReport:
         return sorted(eligible, key=lambda assignment: assignment.timestamp)
 
     @staticmethod
-    def _timestamp_str(timestamp: Optional[datetime]) -> str:
-        return timestamp.isoformat() if isinstance(timestamp, datetime) else ""
-
-    @staticmethod
     def _pattern_coverage_stats(
         assignments: Sequence[TagAssignment],
         windows: Sequence[tuple[int, str]],
@@ -419,6 +416,51 @@ class PatternDetectionReport:
         mean_log2 = strategy.speed_log2(tagger)
         seconds = strategy.seconds_per_tag(mean_log2)
         return round(mean_log2, 6), round(seconds, 6)
+
+    def _questionnaire_tag_capacity(self, questionnaire_id: Optional[str]) -> int:
+        if questionnaire_id in (None, ""):
+            return 0
+
+        return self.QUESTIONNAIRE_TAG_CAPACITY.get(str(questionnaire_id), 0)
+
+    def _available_tags_for_assignments(
+        self, assignments: Sequence[TagAssignment]
+    ) -> int:
+        comment_questionnaires: Dict[str, Optional[str]] = {}
+
+        for assignment in assignments:
+            comment_id = getattr(assignment, "comment_id", None)
+            if comment_id in (None, ""):
+                continue
+
+            comment_key = str(comment_id)
+
+            if comment_key in comment_questionnaires and comment_questionnaires[comment_key]:
+                continue
+
+            questionnaire_id = self._questionnaire_id_for_assignment(assignment)
+            if comment_key not in comment_questionnaires or questionnaire_id:
+                comment_questionnaires[comment_key] = questionnaire_id
+
+        return sum(
+            self._questionnaire_tag_capacity(questionnaire_id)
+            for questionnaire_id in comment_questionnaires.values()
+        )
+
+    def _questionnaire_id_for_assignment(
+        self, assignment: TagAssignment
+    ) -> Optional[str]:
+        question_id = getattr(assignment, "question_id", None)
+        if question_id not in (None, ""):
+            questionnaire_id = self._questionnaire_by_question.get(str(question_id))
+            if questionnaire_id not in (None, ""):
+                return questionnaire_id
+
+        questionnaire_id = getattr(assignment, "questionnaire_id", None)
+        if questionnaire_id in (None, ""):
+            return None
+
+        return str(questionnaire_id)
 
     @staticmethod
     def _assignment_context(

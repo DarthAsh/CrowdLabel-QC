@@ -11,7 +11,9 @@ from qcc.domain.tagger import Tagger
 from qcc.reports.pattern_detection_report import PatternDetectionReport
 
 
-def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "1205") -> list[TagAssignment]:
+def _build_uniform_yes_assignments(
+    count: int = 12, assignment_id: str = "1205", questionnaire_id: str | None = None
+) -> list[TagAssignment]:
     start = datetime(2024, 1, 1, 0, 0, 0)
     assignments = []
     for i in range(count):
@@ -23,6 +25,7 @@ def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "1205")
                 value=TagValue.YES,
                 timestamp=start + timedelta(seconds=i),
                 assignment_id=assignment_id,
+                questionnaire_id=questionnaire_id,
             )
         )
 
@@ -30,7 +33,7 @@ def _build_uniform_yes_assignments(count: int = 12, assignment_id: str = "1205")
 
 
 def test_horizontal_assignments_capture_pattern_window():
-    assignments = _build_uniform_yes_assignments()
+    assignments = _build_uniform_yes_assignments(questionnaire_id="753")
     tagger = Tagger(id="worker-1", tagassignments=assignments)
     report = PatternDetectionReport(assignments)
 
@@ -42,9 +45,10 @@ def test_horizontal_assignments_capture_pattern_window():
     assert horizontal[0]["has_repeating_pattern"] is True
     assert horizontal[0]["assignment_id"] == "1205"
     assert horizontal[0]["pattern_coverage_pct"] == 100.0
-    assert horizontal[0]["eligible_tag_count"] == 12
-    assert horizontal[0]["tags_in_pattern_count"] == 12
-    assert horizontal[0]["distinct_answer_count"] == 12
+    assert horizontal[0]["# Tags Available"] == 24
+    assert horizontal[0]["# Tags Set"] == 12
+    assert horizontal[0]["# Tags Set in a pattern"] == 12
+    assert horizontal[0]["# Comments available to tag"] == 12
     assert horizontal[0]["trimmed_seconds_per_tag"] == 1.0
 
 
@@ -61,7 +65,7 @@ def test_vertical_assignments_filtered_by_characteristic():
 
 
 def test_csv_export_writes_all_assignment_rows(tmp_path):
-    assignments = _build_uniform_yes_assignments()
+    assignments = _build_uniform_yes_assignments(questionnaire_id="753")
     tagger = Tagger(id="worker-1", tagassignments=assignments)
     characteristic = Characteristic(id="char-1", name="Characteristic One")
     report = PatternDetectionReport(assignments)
@@ -80,17 +84,16 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     assert set(reader[0].keys()) == {
         "tagger_id",
         "assignment_id",
-        "first_comment_id",
-        "first_prompt_id",
-        "first_tag_timestamp",
-        "eligible_tag_count",
-        "tags_in_pattern_count",
-        "distinct_answer_count",
+        "# Tags Available",
+        "# Tags Set",
+        "# Tags Set in a pattern",
+        "# Comments available to tag",
         "detected_patterns",
         "has_repeating_pattern",
         "pattern_coverage_pct",
         "trimmed_seconds_per_tag",
     }
+    assert "pattern_id" not in reader[0]
 
 
 def test_csv_export_deduplicates_vertical_rows(tmp_path):
@@ -105,6 +108,7 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
                 value=TagValue.YES,
                 timestamp=start + timedelta(seconds=i),
                 assignment_id="1205",
+                questionnaire_id="753",
             )
         )
         assignments.append(
@@ -115,6 +119,7 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
                 value=TagValue.YES,
                 timestamp=start + timedelta(seconds=i + 12),
                 assignment_id="1205",
+                questionnaire_id="753",
             )
         )
 
@@ -136,19 +141,197 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
     assert len(rows) == 1
 
 
+def test_csv_export_shows_zero_tag_availability(tmp_path):
+    assignments = _build_uniform_yes_assignments(questionnaire_id="999")
+    tagger = Tagger(id="worker-0", tagassignments=assignments)
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report([tagger], [])
+    csv_path = tmp_path / "zero-availability.csv"
+    report.export_to_csv(data, csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    assert len(rows) == 1
+    assert rows[0]["# Tags Available"] == "0"
+
+
 def test_pattern_coverage_partial_window():
-    base_assignments = _build_uniform_yes_assignments(count=18)
+    base_assignments = _build_uniform_yes_assignments(count=18, questionnaire_id="753")
     tagger = Tagger(id="worker-1", tagassignments=base_assignments)
     report = PatternDetectionReport(base_assignments)
 
     data = report.generate_assignment_report([tagger], [])
     coverage = data["horizontal"]["assignments"][0]["pattern_coverage_pct"]
-    pattern_tag_count = data["horizontal"]["assignments"][0]["tags_in_pattern_count"]
-    tag_count = data["horizontal"]["assignments"][0]["eligible_tag_count"]
+    pattern_tag_count = data["horizontal"]["assignments"][0]["# Tags Set in a pattern"]
+    tag_count = data["horizontal"]["assignments"][0]["# Tags Set"]
 
     assert coverage == 66.67
     assert pattern_tag_count == 12
     assert tag_count == 18
+
+
+def test_available_tags_include_skips():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-yes",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="754",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-skip",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id="754",
+        ),
+    ]
+
+    tagger = Tagger(id="worker-1", tagassignments=assignments)
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report([tagger], [])
+    horizontal = data["horizontal"]["assignments"][0]
+
+    assert horizontal["# Tags Available"] == 2
+    # Only the YES/NO tag is eligible for pattern detection
+    assert horizontal["# Tags Set"] == 1
+
+
+def test_tags_available_uses_questionnaire_capacity():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-753-1",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-753-a",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-753-2",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-753-b",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-754",
+            characteristic_id="char-1",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=2),
+            assignment_id="1205",
+            questionnaire_id="754",
+            question_id="question-754",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-other",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=3),
+            assignment_id="1205",
+            questionnaire_id="9999",
+            question_id="question-other",
+        ),
+    ]
+
+    report = PatternDetectionReport(assignments)
+    data = report.generate_assignment_report([Tagger(id="worker-1", tagassignments=assignments)], [])
+    horizontal = data["horizontal"]["assignments"][0]
+
+    # questionnaire_id 753 allows 2 tags per answer and 754 allows 1
+    assert horizontal["# Tags Available"] == 5
+    assert horizontal["# Tags Set"] == 2
+    assert horizontal["# Comments available to tag"] == 4
+
+
+def test_tags_available_counts_unique_comments():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-shared",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-753",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-shared",
+            characteristic_id="char-2",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-753",
+        ),
+    ]
+
+    report = PatternDetectionReport(assignments)
+    data = report.generate_assignment_report(
+        [Tagger(id="worker-1", tagassignments=assignments)], []
+    )
+    horizontal = data["horizontal"]["assignments"][0]
+
+    # Only one comment exists, so availability is counted once despite two tags
+    assert horizontal["# Tags Available"] == 2
+    assert horizontal["# Tags Set"] == 2
+    assert horizontal["# Comments available to tag"] == 1
+
+
+def test_tags_available_backfills_questionnaire_from_question_lookup():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-with-questionnaire",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-shared",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-without-questionnaire",
+            characteristic_id="char-1",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id="question-shared",
+        ),
+    ]
+
+    report = PatternDetectionReport(assignments)
+    data = report.generate_assignment_report(
+        [Tagger(id="worker-1", tagassignments=assignments)], []
+    )
+    horizontal = data["horizontal"]["assignments"][0]
+
+    assert horizontal["# Tags Available"] == 4
+    assert horizontal["# Tags Set"] == 2
+    assert horizontal["# Comments available to tag"] == 2
 
 
 def test_csv_rows_sorted_by_user_id(tmp_path):

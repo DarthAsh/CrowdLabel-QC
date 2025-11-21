@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, DefaultDict, Dict, Iterable, List, Mapping, Optional, Sequence
 from typing import NamedTuple
@@ -958,10 +959,6 @@ class DBAdapter:
         assignments_by_comment: DefaultDict[str, List[TagAssignment]],
         assignments_by_tagger: DefaultDict[str, List[TagAssignment]],
     ) -> None:
-        assignments.append(assignment)
-        assignments_by_comment[assignment.comment_id].append(assignment)
-        assignments_by_tagger[assignment.tagger_id].append(assignment)
-
         comment_id = assignment.comment_id
         answer_row = answers_lookup.get(comment_id)
         comment_entry = comment_meta.get(comment_id)
@@ -1050,8 +1047,40 @@ class DBAdapter:
             )
             if question_text:
                 comment_meta_entry.setdefault("question_text", str(question_text))
+            questionnaire_from_question = self._extract_optional(
+                question_row, ["questionnaire_id", "questionnaireId"]
+            )
+            if questionnaire_from_question not in (None, ""):
+                comment_meta_entry.setdefault(
+                    "questionnaire_id", str(questionnaire_from_question)
+                )
 
         comment_meta[comment_id] = comment_meta_entry
+
+        assignment_question_id = comment_meta_entry.get("question_id")
+        assignment_questionnaire_id = comment_meta_entry.get("questionnaire_id")
+        if assignment_question_id:
+            assignment_question_id = str(assignment_question_id)
+        if assignment_questionnaire_id:
+            assignment_questionnaire_id = str(assignment_questionnaire_id)
+
+        enriched_assignment = assignment
+        if (
+            assignment_question_id != getattr(assignment, "question_id", None)
+            or assignment_questionnaire_id
+            != getattr(assignment, "questionnaire_id", None)
+        ):
+            enriched_assignment = replace(
+                assignment,
+                question_id=assignment_question_id,
+                questionnaire_id=assignment_questionnaire_id,
+            )
+
+        assignments.append(enriched_assignment)
+        assignments_by_comment[assignment.comment_id].append(enriched_assignment)
+        assignments_by_tagger[enriched_assignment.tagger_id].append(
+            enriched_assignment
+        )
 
         characteristic_id = assignment.characteristic_id
         char_entry = characteristic_meta.setdefault(characteristic_id, {})
