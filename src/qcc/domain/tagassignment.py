@@ -32,6 +32,8 @@ class TagAssignment:
     assignment_id: Optional[str] = None
     prompt_id: Optional[str] = None
     team_id: Optional[str] = None
+    question_id: Optional[str] = None
+    questionnaire_id: Optional[str] = None
     
     def __post_init__(self) -> None:
         """Validate the tag assignment."""

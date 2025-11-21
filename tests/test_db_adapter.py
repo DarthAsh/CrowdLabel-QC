@@ -122,8 +122,12 @@ def test_db_adapter_merges_answers_with_tags():
     assert len(assignments) == 2
     assert assignments[0].comment_id == "101"
     assert assignments[0].value == TagValue.YES
+    assert assignments[0].question_id == "7"
+    assert assignments[0].questionnaire_id == "88"
     assert assignments[1].comment_id == "102"
     assert assignments[1].value == TagValue.SKIP
+    assert assignments[1].question_id == "8"
+    assert assignments[1].questionnaire_id == "88"
 
     comments = {comment.id: comment for comment in domain_objects["comments"]}
     assert comments["101"].text == "First answer"
