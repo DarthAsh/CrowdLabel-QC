@@ -465,6 +465,15 @@ class PatternDetectionReport:
                     getattr(assignment, "tagger_id", None),
                 )
 
+        if comment_questionnaires:
+            detection_summary = ", ".join(
+                f"questionnaire_id={questionnaire_id or 'missing'} for user {user_id}"
+                for questionnaire_id, user_id in comment_questionnaires.values()
+            )
+            logger.debug(
+                "Detected questionnaires for tag availability: %s", detection_summary
+            )
+
         return sum(
             self._questionnaire_tag_capacity(questionnaire_id, user_id)
             for questionnaire_id, user_id in comment_questionnaires.values()
