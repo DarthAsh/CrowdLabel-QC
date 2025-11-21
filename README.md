@@ -1,6 +1,6 @@
 # QCC - Quality Control of Crowd labeling
 
-A Python library for analyzing and reporting on crowd labeling quality metrics.
+A Python library for analyzing and reporting on crowd labeling quality metrics..
 
 ## Features
 
