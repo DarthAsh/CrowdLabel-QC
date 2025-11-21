@@ -431,8 +431,7 @@ class PatternDetectionReport:
         user_context = f" for user {user_id}" if user_id not in (None, "") else ""
         if questionnaire_id in (None, ""):
             logger.warning(
-                "Missing questionnaire_id when computing tag availability%s; defaulting to %s",
-                user_context,
+                "Missing questionnaire_id when computing tag availability; defaulting to %s",
                 self.DEFAULT_TAG_CAPACITY,
             )
             return self.DEFAULT_TAG_CAPACITY
@@ -441,9 +440,8 @@ class PatternDetectionReport:
         capacity = self.QUESTIONNAIRE_TAG_CAPACITY.get(questionnaire_id_str)
         if capacity is None:
             logger.warning(
-                "Unknown questionnaire_id %s when computing tag availability%s; defaulting to %s",
+                "Unknown questionnaire_id %s when computing tag availability; defaulting to %s",
                 questionnaire_id_str,
-                user_context,
                 self.DEFAULT_TAG_CAPACITY,
             )
             return self.DEFAULT_TAG_CAPACITY
