@@ -443,6 +443,50 @@ def test_tags_available_backfills_questionnaire_from_question_lookup():
     assert horizontal["# Comments available to tag"] == 2
 
 
+def test_tags_available_uses_question_lookup_from_answer_matches():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    shared_comment_id = "shared-answer"
+    with_question = TagAssignment(
+        tagger_id="user-with-question",
+        comment_id=shared_comment_id,
+        characteristic_id="char-1",
+        value=TagValue.YES,
+        timestamp=start,
+        assignment_id="1205",
+        questionnaire_id="753",
+        question_id="question-known",
+    )
+    missing_question = TagAssignment(
+        tagger_id="user-missing-question",
+        comment_id=shared_comment_id,
+        characteristic_id="char-1",
+        value=TagValue.NO,
+        timestamp=start + timedelta(seconds=1),
+        assignment_id="1205",
+        questionnaire_id=None,
+        question_id=None,
+    )
+
+    assignments = [with_question, missing_question]
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report(
+        [
+            Tagger(id="user-missing-question", tagassignments=[missing_question]),
+            Tagger(id="user-with-question", tagassignments=[with_question]),
+        ],
+        [],
+    )
+
+    horizontal = data["horizontal"]["assignments"]
+    availability_by_user = {
+        row["tagger_id"]: row["# Tags Available"] for row in horizontal
+    }
+
+    assert availability_by_user["user-with-question"] == 2
+    assert availability_by_user["user-missing-question"] == 2
+
+
 def test_csv_rows_sorted_by_user_id(tmp_path):
     assignments_a = _build_uniform_yes_assignments(assignment_id="1205")
     tagger_a = Tagger(id="user-1", tagassignments=assignments_a)

@@ -30,6 +30,13 @@ class PatternDetectionReport:
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
+        self._question_by_comment: Dict[str, str] = {
+            str(getattr(assignment, "comment_id")):
+            str(getattr(assignment, "question_id"))
+            for assignment in self.assignments
+            if getattr(assignment, "comment_id", None) not in (None, "")
+            and getattr(assignment, "question_id", None) not in (None, "")
+        }
         self._questionnaire_by_question: Dict[str, str] = {
             str(getattr(assignment, "question_id")):
             str(getattr(assignment, "questionnaire_id"))
@@ -483,6 +490,11 @@ class PatternDetectionReport:
         self, assignment: TagAssignment
     ) -> Optional[str]:
         question_id = getattr(assignment, "question_id", None)
+        if question_id in (None, ""):
+            comment_id = getattr(assignment, "comment_id", None)
+            if comment_id not in (None, ""):
+                question_id = self._question_by_comment.get(str(comment_id))
+
         if question_id not in (None, ""):
             questionnaire_id = self._questionnaire_by_question.get(str(question_id))
             if questionnaire_id not in (None, ""):
