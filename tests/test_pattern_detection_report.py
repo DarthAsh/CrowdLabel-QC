@@ -201,6 +201,7 @@ def test_tags_available_uses_questionnaire_capacity():
             timestamp=start,
             assignment_id="1205",
             questionnaire_id="753",
+            question_id="question-753-a",
         ),
         TagAssignment(
             tagger_id="worker-1",
@@ -210,6 +211,7 @@ def test_tags_available_uses_questionnaire_capacity():
             timestamp=start + timedelta(seconds=1),
             assignment_id="1205",
             questionnaire_id="753",
+            question_id="question-753-b",
         ),
         TagAssignment(
             tagger_id="worker-1",
@@ -219,6 +221,7 @@ def test_tags_available_uses_questionnaire_capacity():
             timestamp=start + timedelta(seconds=2),
             assignment_id="1205",
             questionnaire_id="754",
+            question_id="question-754",
         ),
         TagAssignment(
             tagger_id="worker-1",
@@ -228,6 +231,7 @@ def test_tags_available_uses_questionnaire_capacity():
             timestamp=start + timedelta(seconds=3),
             assignment_id="1205",
             questionnaire_id="9999",
+            question_id="question-other",
         ),
     ]
 
@@ -239,6 +243,42 @@ def test_tags_available_uses_questionnaire_capacity():
     assert horizontal["# Tags Available"] == 5
     assert horizontal["# Tags Set"] == 2
     assert horizontal["# Comments available to tag"] == 4
+
+
+def test_tags_available_backfills_questionnaire_from_question_lookup():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-with-questionnaire",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-shared",
+        ),
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-without-questionnaire",
+            characteristic_id="char-1",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id="question-shared",
+        ),
+    ]
+
+    report = PatternDetectionReport(assignments)
+    data = report.generate_assignment_report(
+        [Tagger(id="worker-1", tagassignments=assignments)], []
+    )
+    horizontal = data["horizontal"]["assignments"][0]
+
+    assert horizontal["# Tags Available"] == 4
+    assert horizontal["# Tags Set"] == 2
+    assert horizontal["# Comments available to tag"] == 2
 
 
 def test_csv_rows_sorted_by_user_id(tmp_path):

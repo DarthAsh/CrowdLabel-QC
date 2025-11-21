@@ -29,6 +29,13 @@ class PatternDetectionReport:
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
+        self._questionnaire_by_question: Dict[str, str] = {
+            str(getattr(assignment, "question_id")):
+            str(getattr(assignment, "questionnaire_id"))
+            for assignment in self.assignments
+            if getattr(assignment, "question_id", None) not in (None, "")
+            and getattr(assignment, "questionnaire_id", None) not in (None, "")
+        }
 
     def generate_assignment_report(
         self,
@@ -243,7 +250,7 @@ class PatternDetectionReport:
         _, seconds_per_tag = self._speed_metrics(eligible_assignments)
         available_tag_count = sum(
             self._questionnaire_tag_capacity(
-                getattr(assignment, "questionnaire_id", None)
+                self._questionnaire_id_for_assignment(assignment)
             )
             for assignment in assignments
         )
@@ -414,6 +421,21 @@ class PatternDetectionReport:
             return 0
 
         return self.QUESTIONNAIRE_TAG_CAPACITY.get(str(questionnaire_id), 0)
+
+    def _questionnaire_id_for_assignment(
+        self, assignment: TagAssignment
+    ) -> Optional[str]:
+        question_id = getattr(assignment, "question_id", None)
+        if question_id not in (None, ""):
+            questionnaire_id = self._questionnaire_by_question.get(str(question_id))
+            if questionnaire_id not in (None, ""):
+                return questionnaire_id
+
+        questionnaire_id = getattr(assignment, "questionnaire_id", None)
+        if questionnaire_id in (None, ""):
+            return None
+
+        return str(questionnaire_id)
 
     @staticmethod
     def _assignment_context(

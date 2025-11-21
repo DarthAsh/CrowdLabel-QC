@@ -140,11 +140,12 @@ and the pattern/speed columns are emitted.
 - `tagger_id`, `assignment_id` – the tagger and assignment identifiers; only
   assignment `1205` rows are written.
 - `# Tags Available` – maximum possible tags for the tagger/assignment pair,
-  summed per answered question only when its `questionnaire_id` is `753` (2 tags
-  per answer) or `754` (1 tag per answer). Answers tied to other questionnaires
-  are ignored. Skipped answers still contribute to this availability total when
-  their questionnaire is counted, even though they are ineligible for pattern
-  detection.
+  summed per answered question by resolving the answer's `question_id` to its
+  parent questionnaire. Only questionnaires `753` (2 tags per answer) and `754`
+  (1 tag per answer) contribute to this total; answers tied to other
+  questionnaires are ignored. Skipped answers still contribute to this
+  availability total when their questionnaire is counted, even though they are
+  ineligible for pattern detection.
 - `# Tags Set` – number of eligible timestamped YES/NO tags examined for the
   tagger/assignment pair (the input to pattern detection).
 - `# Tags Set in a pattern` – count of those eligible tags that fell within at
