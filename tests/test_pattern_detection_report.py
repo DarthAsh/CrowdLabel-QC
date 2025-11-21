@@ -487,6 +487,76 @@ def test_tags_available_uses_question_lookup_from_answer_matches():
     assert availability_by_user["user-missing-question"] == 2
 
 
+def test_tags_available_applies_questionnaire_capacity_from_shared_answers():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    shared_questionnaire_assignments = [
+        TagAssignment(
+            tagger_id="user-with-details",
+            comment_id="answer-753",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-753",
+        ),
+        TagAssignment(
+            tagger_id="user-with-details",
+            comment_id="answer-754",
+            characteristic_id="char-1",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id="754",
+            question_id="question-754",
+        ),
+    ]
+
+    missing_details_assignments = [
+        TagAssignment(
+            tagger_id="user-without-details",
+            comment_id="answer-753",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start + timedelta(seconds=2),
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id=None,
+        ),
+        TagAssignment(
+            tagger_id="user-without-details",
+            comment_id="answer-754",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=3),
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id=None,
+        ),
+    ]
+
+    assignments = shared_questionnaire_assignments + missing_details_assignments
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report(
+        [
+            Tagger(id="user-with-details", tagassignments=shared_questionnaire_assignments),
+            Tagger(id="user-without-details", tagassignments=missing_details_assignments),
+        ],
+        [],
+    )
+
+    availability_by_user = {
+        row["tagger_id"]: row["# Tags Available"]
+        for row in data["horizontal"]["assignments"]
+    }
+
+    assert availability_by_user["user-with-details"] == 3
+    # Ensure questionnaire-derived capacity (2 for 753, 1 for 754) is applied
+    # even when the current user lacks question metadata.
+    assert availability_by_user["user-without-details"] == 3
+
+
 def test_csv_rows_sorted_by_user_id(tmp_path):
     assignments_a = _build_uniform_yes_assignments(assignment_id="1205")
     tagger_a = Tagger(id="user-1", tagassignments=assignments_a)

@@ -465,7 +465,9 @@ class PatternDetectionReport:
             if comment_key in comment_questionnaires and comment_questionnaires[comment_key][0]:
                 continue
 
-            questionnaire_id = self._questionnaire_id_for_assignment(assignment)
+            questionnaire_id = self._questionnaire_id_for_comment(
+                comment_key, assignment
+            )
             if comment_key not in comment_questionnaires or questionnaire_id:
                 comment_questionnaires[comment_key] = (
                     questionnaire_id,
@@ -485,6 +487,24 @@ class PatternDetectionReport:
             self._questionnaire_tag_capacity(questionnaire_id, user_id)
             for questionnaire_id, user_id in comment_questionnaires.values()
         )
+
+    def _questionnaire_id_for_comment(
+        self, comment_id: str, assignment: TagAssignment
+    ) -> Optional[str]:
+        question_id = getattr(assignment, "question_id", None)
+        if question_id in (None, ""):
+            question_id = self._question_by_comment.get(comment_id)
+
+        if question_id not in (None, ""):
+            questionnaire_id = self._questionnaire_by_question.get(str(question_id))
+            if questionnaire_id not in (None, ""):
+                return questionnaire_id
+
+        questionnaire_id = getattr(assignment, "questionnaire_id", None)
+        if questionnaire_id in (None, ""):
+            return None
+
+        return str(questionnaire_id)
 
     def _questionnaire_id_for_assignment(
         self, assignment: TagAssignment
