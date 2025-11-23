@@ -497,11 +497,12 @@ class PatternDetectionReport:
         """Return a mapping of tagger_id to team_id for the target assignment."""
 
         query = """
-            SELECT assignment_view.user_id AS tagger_id, team_view.team_id AS team_id
-            FROM assignment_team_views AS assignment_view
-            INNER JOIN team_views AS team_view
-                ON assignment_view.team_id = team_view.team_id
-            WHERE assignment_view.assignment_id = %s
+            SELECT v1.user_id AS tagger_id, v2.team_id AS team_id
+            FROM view1 v1
+            INNER JOIN view2 v2
+                ON v1.user_id = v2.user_id
+               AND v1.assignment_id = v2.assignment_id
+            WHERE v1.assignment_id = %s
         """
 
         tagger_team_map: Dict[str, str] = {}
