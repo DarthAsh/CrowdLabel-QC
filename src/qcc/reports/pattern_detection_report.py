@@ -11,6 +11,8 @@ from qcc.domain.characteristic import Characteristic
 from qcc.domain.enums import TagValue
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
+from qcc.data_ingestion.mysql_config import MySQLConfig
+from qcc.data_ingestion.mysql_importer import mysql_connection
 from qcc.metrics.speed_strategy import LogTrimTaggingSpeed
 from qcc.metrics.pattern_strategy import (
     HorizontalPatternDetection,
@@ -489,4 +491,121 @@ class PatternDetectionReport:
             "comment_id": getattr(assignment, "comment_id", None),
             "characteristic_id": getattr(assignment, "characteristic_id", None),
         }
+
+    @classmethod
+    def _assignment_team_map(cls, mysql_config: MySQLConfig) -> Dict[str, str]:
+        """Return a mapping of tagger_id to team_id for the target assignment."""
+
+        query = """
+            SELECT assignment_view.user_id AS tagger_id, team_view.team_id AS team_id
+            FROM assignment_team_views AS assignment_view
+            INNER JOIN team_views AS team_view
+                ON assignment_view.team_id = team_view.team_id
+            WHERE assignment_view.assignment_id = %s
+        """
+
+        tagger_team_map: Dict[str, str] = {}
+        with mysql_connection(mysql_config) as connection:
+            cursor = connection.cursor(dictionary=True)
+            try:
+                cursor.execute(query, (cls.TARGET_ASSIGNMENT_ID,))
+                for row in cursor.fetchall():
+                    tagger_id = row.get("tagger_id")
+                    team_id = row.get("team_id")
+                    if tagger_id in (None, "") or team_id in (None, ""):
+                        logger.warning(
+                            "Missing team mapping data in assignment/team view row: %s",
+                            row,
+                        )
+                        continue
+
+                    tagger_team_map[str(tagger_id)] = str(team_id)
+            finally:
+                cursor.close()
+
+        return tagger_team_map
+
+    @classmethod
+    def _team_review_answer_counts(cls, mysql_config: MySQLConfig) -> Dict[str, int]:
+        """Return review answer counts per team for the target assignment."""
+
+        query = """
+            SELECT rm.reviewee_id AS team_id, COUNT(a.id) AS answer_count
+            FROM response_maps rm
+            INNER JOIN responses r ON r.map_id = rm.id
+            INNER JOIN answers a ON a.response_id = r.id
+            WHERE rm.assignment_id = %s
+              AND r.is_submitted = 1
+              AND r.comments IS NOT NULL
+              AND TRIM(r.comments) <> ''
+              AND a.answer IS NOT NULL
+            GROUP BY rm.reviewee_id
+        """
+
+        answer_counts: Dict[str, int] = {}
+        with mysql_connection(mysql_config) as connection:
+            cursor = connection.cursor(dictionary=True)
+            try:
+                cursor.execute(query, (cls.TARGET_ASSIGNMENT_ID,))
+                for row in cursor.fetchall():
+                    team_id = row.get("team_id")
+                    count = row.get("answer_count")
+                    if team_id in (None, ""):
+                        logger.warning(
+                            "Skipping review answer count row without team_id: %s", row
+                        )
+                        continue
+
+                    answer_counts[str(team_id)] = int(count or 0)
+            finally:
+                cursor.close()
+
+        return answer_counts
+
+    def _recalculate_csv_tag_availability(
+        self, csv_path: Path, mysql_config: MySQLConfig
+    ) -> None:
+        """Recalculate tag availability in the CSV using review answer counts."""
+
+        tagger_team_map = self._assignment_team_map(mysql_config)
+        team_answer_counts = self._team_review_answer_counts(mysql_config)
+
+        with csv_path.open("r", newline="", encoding="utf-8") as csv_file:
+            reader = csv.DictReader(csv_file)
+            fieldnames = list(reader.fieldnames or [])
+            if "team_id" not in fieldnames:
+                if "tagger_id" in fieldnames:
+                    insert_at = fieldnames.index("tagger_id") + 1
+                    fieldnames.insert(insert_at, "team_id")
+                else:
+                    fieldnames.append("team_id")
+
+            rows: List[Dict[str, str]] = []
+            for row in reader:
+                tagger_id = row.get("tagger_id")
+                team_id = tagger_team_map.get(str(tagger_id)) if tagger_id else None
+                if team_id is None:
+                    logger.warning(
+                        "No team mapping found for tagger_id %s in assignment %s",
+                        tagger_id,
+                        self.TARGET_ASSIGNMENT_ID,
+                    )
+
+                availability = team_answer_counts.get(team_id, 0) if team_id else 0
+                logger.info(
+                    "Recalculated tag availability for tagger %s team %s: %s",
+                    tagger_id,
+                    team_id,
+                    availability,
+                )
+
+                row["team_id"] = team_id or ""
+                row["# Tags Available"] = str(availability)
+                rows.append(row)
+
+        with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
 
