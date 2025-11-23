@@ -141,7 +141,7 @@ def test_csv_export_deduplicates_vertical_rows(tmp_path):
     assert len(rows) == 1
 
 
-def test_csv_export_shows_zero_tag_availability(tmp_path):
+def test_csv_export_defaults_tag_availability(tmp_path):
     assignments = _build_uniform_yes_assignments(questionnaire_id="999")
     tagger = Tagger(id="worker-0", tagassignments=assignments)
     report = PatternDetectionReport(assignments)
@@ -155,6 +155,71 @@ def test_csv_export_shows_zero_tag_availability(tmp_path):
 
     assert len(rows) == 1
     assert rows[0]["# Tags Available"] == "0"
+
+
+def test_csv_recalculation_sets_tag_availability_from_answers(tmp_path, caplog):
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="user-logs",
+            comment_id="answer-753",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-753",
+        ),
+        TagAssignment(
+            tagger_id="user-logs",
+            comment_id="answer-754",
+            characteristic_id="char-1",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id="754",
+            question_id="question-754",
+        ),
+        TagAssignment(
+            tagger_id="user-other",
+            comment_id="answer-754-other",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start + timedelta(seconds=2),
+            assignment_id="1205",
+            questionnaire_id="754",
+            question_id="question-754-other",
+        ),
+    ]
+
+    taggers = [
+        Tagger(id="user-logs", tagassignments=[assignments[0], assignments[1]]),
+        Tagger(id="user-other", tagassignments=[assignments[2]]),
+    ]
+
+    report = PatternDetectionReport(assignments)
+    data = report.generate_assignment_report(taggers, [])
+    csv_path = tmp_path / "recalc.csv"
+
+    with caplog.at_level(logging.INFO):
+        report.export_to_csv(data, csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    availability_by_user = {
+        row["tagger_id"]: int(row["# Tags Available"]) for row in rows
+    }
+
+    assert availability_by_user["user-logs"] == 3
+    assert availability_by_user["user-other"] == 1
+    assert any(
+        "User user-logs answered questions" in record.message
+        and "question-753" in record.message
+        and "question-754" in record.message
+        and "Available to 3" in record.message
+        for record in caplog.records
+    )
 
 
 def test_pattern_coverage_partial_window():
@@ -255,8 +320,9 @@ def test_tags_available_uses_questionnaire_capacity():
     data = report.generate_assignment_report([Tagger(id="worker-1", tagassignments=assignments)], [])
     horizontal = data["horizontal"]["assignments"][0]
 
-    # questionnaire_id 753 allows 2 tags per answer and 754 allows 1
-    assert horizontal["# Tags Available"] == 5
+    # questionnaire_id 753 allows 2 tags per answer, 754 allows 1, and unknown
+    # questionnaires default to the minimal capacity
+    assert horizontal["# Tags Available"] == 6
     assert horizontal["# Tags Set"] == 2
     assert horizontal["# Comments available to tag"] == 4
 
@@ -298,6 +364,114 @@ def test_tags_available_counts_unique_comments():
     assert horizontal["# Comments available to tag"] == 1
 
 
+def test_tags_available_defaults_capacity_for_missing_questionnaire(caplog):
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-1",
+            comment_id="comment-without-questionnaire",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id="question-without-questionnaire",
+        )
+    ]
+
+    report = PatternDetectionReport(assignments)
+    with caplog.at_level(logging.WARNING):
+        data = report.generate_assignment_report(
+            [Tagger(id="worker-1", tagassignments=assignments)], []
+        )
+
+    horizontal = data["horizontal"]["assignments"][0]
+
+    assert horizontal["# Tags Available"] == 1
+    assert horizontal["# Comments available to tag"] == 1
+    assert any(
+        "defaulting" in record.message and "worker-1" in record.message
+        for record in caplog.records
+    )
+
+
+def test_tags_available_logs_user_for_unknown_questionnaire(caplog):
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-2",
+            comment_id="comment-unknown-questionnaire",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="9999",
+            question_id="question-unknown",
+        )
+    ]
+
+    report = PatternDetectionReport(assignments)
+    with caplog.at_level(logging.WARNING):
+        data = report.generate_assignment_report(
+            [Tagger(id="worker-2", tagassignments=assignments)], []
+        )
+
+    horizontal = data["horizontal"]["assignments"][0]
+
+    assert horizontal["# Tags Available"] == 1
+    assert horizontal["# Comments available to tag"] == 1
+    assert any(
+        "Unknown questionnaire_id" in record.message and "worker-2" in record.message
+        for record in caplog.records
+    )
+
+
+def test_tags_available_logs_detected_questionnaires(caplog):
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="worker-logs",
+            comment_id="comment-known",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-known",
+        ),
+        TagAssignment(
+            tagger_id="worker-logs",
+            comment_id="comment-missing",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id="question-missing",
+        ),
+    ]
+
+    report = PatternDetectionReport(assignments)
+
+    with caplog.at_level(logging.DEBUG):
+        data = report.generate_assignment_report(
+            [Tagger(id="worker-logs", tagassignments=assignments)], []
+        )
+
+    horizontal = data["horizontal"]["assignments"][0]
+
+    assert horizontal["# Tags Available"] == 3
+    assert any(
+        "questionnaire_id=753" in record.message and "user worker-logs" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "questionnaire_id=missing" in record.message
+        and "user worker-logs" in record.message
+        for record in caplog.records
+    )
+
+
 def test_tags_available_backfills_questionnaire_from_question_lookup():
     start = datetime(2024, 1, 1, 0, 0, 0)
     assignments = [
@@ -332,6 +506,120 @@ def test_tags_available_backfills_questionnaire_from_question_lookup():
     assert horizontal["# Tags Available"] == 4
     assert horizontal["# Tags Set"] == 2
     assert horizontal["# Comments available to tag"] == 2
+
+
+def test_tags_available_uses_question_lookup_from_answer_matches():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    shared_comment_id = "shared-answer"
+    with_question = TagAssignment(
+        tagger_id="user-with-question",
+        comment_id=shared_comment_id,
+        characteristic_id="char-1",
+        value=TagValue.YES,
+        timestamp=start,
+        assignment_id="1205",
+        questionnaire_id="753",
+        question_id="question-known",
+    )
+    missing_question = TagAssignment(
+        tagger_id="user-missing-question",
+        comment_id=shared_comment_id,
+        characteristic_id="char-1",
+        value=TagValue.NO,
+        timestamp=start + timedelta(seconds=1),
+        assignment_id="1205",
+        questionnaire_id=None,
+        question_id=None,
+    )
+
+    assignments = [with_question, missing_question]
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report(
+        [
+            Tagger(id="user-missing-question", tagassignments=[missing_question]),
+            Tagger(id="user-with-question", tagassignments=[with_question]),
+        ],
+        [],
+    )
+
+    horizontal = data["horizontal"]["assignments"]
+    availability_by_user = {
+        row["tagger_id"]: row["# Tags Available"] for row in horizontal
+    }
+
+    assert availability_by_user["user-with-question"] == 2
+    assert availability_by_user["user-missing-question"] == 2
+
+
+def test_tags_available_applies_questionnaire_capacity_from_shared_answers():
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    shared_questionnaire_assignments = [
+        TagAssignment(
+            tagger_id="user-with-details",
+            comment_id="answer-753",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            questionnaire_id="753",
+            question_id="question-753",
+        ),
+        TagAssignment(
+            tagger_id="user-with-details",
+            comment_id="answer-754",
+            characteristic_id="char-1",
+            value=TagValue.NO,
+            timestamp=start + timedelta(seconds=1),
+            assignment_id="1205",
+            questionnaire_id="754",
+            question_id="question-754",
+        ),
+    ]
+
+    missing_details_assignments = [
+        TagAssignment(
+            tagger_id="user-without-details",
+            comment_id="answer-753",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start + timedelta(seconds=2),
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id=None,
+        ),
+        TagAssignment(
+            tagger_id="user-without-details",
+            comment_id="answer-754",
+            characteristic_id="char-1",
+            value=TagValue.SKIP,
+            timestamp=start + timedelta(seconds=3),
+            assignment_id="1205",
+            questionnaire_id=None,
+            question_id=None,
+        ),
+    ]
+
+    assignments = shared_questionnaire_assignments + missing_details_assignments
+    report = PatternDetectionReport(assignments)
+
+    data = report.generate_assignment_report(
+        [
+            Tagger(id="user-with-details", tagassignments=shared_questionnaire_assignments),
+            Tagger(id="user-without-details", tagassignments=missing_details_assignments),
+        ],
+        [],
+    )
+
+    availability_by_user = {
+        row["tagger_id"]: row["# Tags Available"]
+        for row in data["horizontal"]["assignments"]
+    }
+
+    assert availability_by_user["user-with-details"] == 3
+    # Ensure questionnaire-derived capacity (2 for 753, 1 for 754) is applied
+    # even when the current user lacks question metadata.
+    assert availability_by_user["user-without-details"] == 3
 
 
 def test_csv_rows_sorted_by_user_id(tmp_path):

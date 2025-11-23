@@ -26,9 +26,17 @@ class PatternDetectionReport:
 
     TARGET_ASSIGNMENT_ID = "1205"
     QUESTIONNAIRE_TAG_CAPACITY = {"753": 2, "754": 1}
+    DEFAULT_TAG_CAPACITY = 1
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
+        self._question_by_comment: Dict[str, str] = {
+            str(getattr(assignment, "comment_id")):
+            str(getattr(assignment, "question_id"))
+            for assignment in self.assignments
+            if getattr(assignment, "comment_id", None) not in (None, "")
+            and getattr(assignment, "question_id", None) not in (None, "")
+        }
         self._questionnaire_by_question: Dict[str, str] = {
             str(getattr(assignment, "question_id")):
             str(getattr(assignment, "questionnaire_id"))
@@ -102,6 +110,8 @@ class PatternDetectionReport:
         logger.info(
             "Pattern detection CSV written to %s with %s rows", csv_path, len(rows)
         )
+
+        self._recalculate_csv_tag_availability(csv_path)
 
     def _build_horizontal_results(
         self, taggers: Sequence[Tagger], strategy: PatternSignalsStrategy
@@ -417,40 +427,193 @@ class PatternDetectionReport:
         seconds = strategy.seconds_per_tag(mean_log2)
         return round(mean_log2, 6), round(seconds, 6)
 
-    def _questionnaire_tag_capacity(self, questionnaire_id: Optional[str]) -> int:
+    def _questionnaire_tag_capacity(
+        self, questionnaire_id: Optional[str], user_id: Optional[str] = None
+    ) -> int:
+        user_context = f" for user {user_id}" if user_id not in (None, "") else ""
         if questionnaire_id in (None, ""):
-            return 0
+            logger.warning(
+                "Missing questionnaire_id when computing tag availability%s; defaulting to %s",
+                user_context,
+                self.DEFAULT_TAG_CAPACITY,
+            )
+            return self.DEFAULT_TAG_CAPACITY
 
-        return self.QUESTIONNAIRE_TAG_CAPACITY.get(str(questionnaire_id), 0)
+        questionnaire_id_str = str(questionnaire_id)
+        capacity = self.QUESTIONNAIRE_TAG_CAPACITY.get(questionnaire_id_str)
+        if capacity is None:
+            logger.warning(
+                "Unknown questionnaire_id %s when computing tag availability%s; defaulting to %s",
+                questionnaire_id_str,
+                user_context,
+                self.DEFAULT_TAG_CAPACITY,
+            )
+            return self.DEFAULT_TAG_CAPACITY
+
+        return capacity
 
     def _available_tags_for_assignments(
         self, assignments: Sequence[TagAssignment]
     ) -> int:
-        comment_questionnaires: Dict[str, Optional[str]] = {}
+        user_comment_questionnaires: Dict[str, Dict[str, Optional[str]]] = {}
 
         for assignment in assignments:
+            user_id = getattr(assignment, "tagger_id", None)
+            if user_id in (None, ""):
+                continue
+
             comment_id = getattr(assignment, "comment_id", None)
             if comment_id in (None, ""):
                 continue
 
+            user_key = str(user_id)
             comment_key = str(comment_id)
+            user_comment_questionnaires.setdefault(user_key, {})
 
-            if comment_key in comment_questionnaires and comment_questionnaires[comment_key]:
+            if (
+                comment_key in user_comment_questionnaires[user_key]
+                and user_comment_questionnaires[user_key][comment_key]
+            ):
                 continue
 
-            questionnaire_id = self._questionnaire_id_for_assignment(assignment)
-            if comment_key not in comment_questionnaires or questionnaire_id:
-                comment_questionnaires[comment_key] = questionnaire_id
+            questionnaire_id = self._questionnaire_id_for_comment(
+                comment_key, assignment
+            )
 
-        return sum(
-            self._questionnaire_tag_capacity(questionnaire_id)
-            for questionnaire_id in comment_questionnaires.values()
-        )
+            if (
+                comment_key not in user_comment_questionnaires[user_key]
+                or questionnaire_id is not None
+            ):
+                user_comment_questionnaires[user_key][comment_key] = questionnaire_id
+
+        for user_id, questionnaires in user_comment_questionnaires.items():
+            if not questionnaires:
+                continue
+
+            detection_summary = ", ".join(
+                f"questionnaire_id={questionnaire_id or 'missing'} for user {user_id}"
+                for questionnaire_id in questionnaires.values()
+            )
+            logger.debug(
+                "Detected questionnaires for tag availability: %s", detection_summary
+            )
+
+        availability_by_user = {
+            user_id: sum(
+                self._questionnaire_tag_capacity(questionnaire_id, user_id)
+                for questionnaire_id in questionnaires.values()
+            )
+            for user_id, questionnaires in user_comment_questionnaires.items()
+        }
+
+        if not assignments:
+            return 0
+
+        primary_user = str(getattr(assignments[0], "tagger_id", ""))
+        return availability_by_user.get(primary_user, 0)
+
+    def _recalculate_csv_tag_availability(self, csv_path: Path) -> None:
+        if not csv_path.exists():
+            logger.warning("CSV path %s does not exist for recalculation", csv_path)
+            return
+
+        with csv_path.open(newline="", encoding="utf-8") as csv_file:
+            reader = list(csv.DictReader(csv_file))
+            fieldnames = reader[0].keys() if reader else []
+
+        if not reader or not fieldnames:
+            logger.info(
+                "No rows available to recalculate tag availability in %s", csv_path
+            )
+            return
+
+        questions_by_user = self._questions_answered_by_user()
+        availability_by_user = {
+            user_id: self._availability_from_questions(question_ids)
+            for user_id, question_ids in questions_by_user.items()
+        }
+
+        for row in reader:
+            user_id = row.get("tagger_id", "")
+            questions_answered = questions_by_user.get(user_id, [])
+            availability = availability_by_user.get(user_id, 0)
+
+            logger.info(
+                "User %s answered questions %s; setting # Tags Available to %s",
+                user_id,
+                questions_answered,
+                availability,
+            )
+
+            row["# Tags Available"] = str(availability)
+
+        with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(reader)
+
+    def _questions_answered_by_user(self) -> Dict[str, List[str]]:
+        questions_by_user: Dict[str, List[str]] = {}
+
+        for assignment in self.assignments:
+            user_id = getattr(assignment, "tagger_id", None)
+            if user_id in (None, ""):
+                continue
+
+            question_id = getattr(assignment, "question_id", None)
+            if question_id in (None, ""):
+                comment_id = getattr(assignment, "comment_id", None)
+                if comment_id not in (None, ""):
+                    question_id = self._question_by_comment.get(str(comment_id))
+
+            if question_id in (None, ""):
+                continue
+
+            user_key = str(user_id)
+            questions_by_user.setdefault(user_key, [])
+            if str(question_id) not in questions_by_user[user_key]:
+                questions_by_user[user_key].append(str(question_id))
+
+        return questions_by_user
+
+    def _availability_from_questions(self, question_ids: Sequence[str]) -> int:
+        availability = 0
+        for question_id in question_ids:
+            questionnaire_id = self._questionnaire_by_question.get(str(question_id))
+            if questionnaire_id == "753":
+                availability += 2
+            elif questionnaire_id == "754":
+                availability += 1
+
+        return availability
+
+    def _questionnaire_id_for_comment(
+        self, comment_id: str, assignment: TagAssignment
+    ) -> Optional[str]:
+        question_id = getattr(assignment, "question_id", None)
+        if question_id in (None, ""):
+            question_id = self._question_by_comment.get(comment_id)
+
+        if question_id not in (None, ""):
+            questionnaire_id = self._questionnaire_by_question.get(str(question_id))
+            if questionnaire_id not in (None, ""):
+                return questionnaire_id
+
+        questionnaire_id = getattr(assignment, "questionnaire_id", None)
+        if questionnaire_id in (None, ""):
+            return None
+
+        return str(questionnaire_id)
 
     def _questionnaire_id_for_assignment(
         self, assignment: TagAssignment
     ) -> Optional[str]:
         question_id = getattr(assignment, "question_id", None)
+        if question_id in (None, ""):
+            comment_id = getattr(assignment, "comment_id", None)
+            if comment_id not in (None, ""):
+                question_id = self._question_by_comment.get(str(comment_id))
+
         if question_id not in (None, ""):
             questionnaire_id = self._questionnaire_by_question.get(str(question_id))
             if questionnaire_id not in (None, ""):
