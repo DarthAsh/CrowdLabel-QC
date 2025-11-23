@@ -642,6 +642,53 @@ def test_csv_rows_sorted_by_user_id(tmp_path):
     assert user_ids == sorted(user_ids)
 
 
+def test_csv_recalculation_uses_answer_and_question_maps(tmp_path, caplog):
+    start = datetime(2024, 1, 1, 0, 0, 0)
+    assignments = [
+        TagAssignment(
+            tagger_id="user-without-question-details",
+            comment_id="answer-753",
+            characteristic_id="char-1",
+            value=TagValue.YES,
+            timestamp=start,
+            assignment_id="1205",
+            question_id=None,
+            questionnaire_id=None,
+        )
+    ]
+
+    answers = [
+        {
+            "id": "answer-753",
+            "question_id": "question-753",
+        }
+    ]
+
+    questions = [
+        {
+            "id": "question-753",
+            "questionnaire_id": "753",
+        }
+    ]
+
+    tagger = Tagger(id="user-without-question-details", tagassignments=assignments)
+    report = PatternDetectionReport(assignments, answers=answers, questions=questions)
+
+    with caplog.at_level(logging.INFO):
+        data = report.generate_assignment_report([tagger], [])
+        csv_path = tmp_path / "recalculated.csv"
+        report.export_to_csv(data, csv_path)
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        rows = list(csv.DictReader(csv_file))
+
+    assert rows[0]["# Tags Available"] == "2"
+    assert any(
+        "answered questions ['question-753']; setting # Tags Available to 2" in record.message
+        for record in caplog.records
+    )
+
+
 def test_only_target_assignment_rows_emitted():
     included = _build_uniform_yes_assignments(assignment_id="1205")
     excluded = _build_uniform_yes_assignments(assignment_id="9999")

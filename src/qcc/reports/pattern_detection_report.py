@@ -28,8 +28,18 @@ class PatternDetectionReport:
     QUESTIONNAIRE_TAG_CAPACITY = {"753": 2, "754": 1}
     DEFAULT_TAG_CAPACITY = 1
 
-    def __init__(self, assignments: Sequence[TagAssignment]) -> None:
+    def __init__(
+        self,
+        assignments: Sequence[TagAssignment],
+        *,
+        answers: Optional[Sequence[Mapping[str, object]]] = None,
+        questions: Optional[Sequence[Mapping[str, object]]] = None,
+    ) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
+
+        answers = answers or []
+        questions = questions or []
+
         self._question_by_comment: Dict[str, str] = {
             str(getattr(assignment, "comment_id")):
             str(getattr(assignment, "question_id"))
@@ -37,6 +47,12 @@ class PatternDetectionReport:
             if getattr(assignment, "comment_id", None) not in (None, "")
             and getattr(assignment, "question_id", None) not in (None, "")
         }
+        for answer in answers:
+            answer_id = answer.get("id") or answer.get("answer_id") or answer.get("answerId")
+            question_id = answer.get("question_id") or answer.get("questionId")
+            if answer_id not in (None, "") and question_id not in (None, ""):
+                self._question_by_comment.setdefault(str(answer_id), str(question_id))
+
         self._questionnaire_by_question: Dict[str, str] = {
             str(getattr(assignment, "question_id")):
             str(getattr(assignment, "questionnaire_id"))
@@ -44,6 +60,21 @@ class PatternDetectionReport:
             if getattr(assignment, "question_id", None) not in (None, "")
             and getattr(assignment, "questionnaire_id", None) not in (None, "")
         }
+        for answer in answers:
+            question_id = answer.get("question_id") or answer.get("questionId")
+            questionnaire_id = answer.get("questionnaire_id") or answer.get("questionnaireId")
+            if question_id not in (None, "") and questionnaire_id not in (None, ""):
+                self._questionnaire_by_question.setdefault(
+                    str(question_id), str(questionnaire_id)
+                )
+
+        for question in questions:
+            question_id = question.get("id") or question.get("question_id") or question.get("questionId")
+            questionnaire_id = question.get("questionnaire_id") or question.get("questionnaireId")
+            if question_id not in (None, "") and questionnaire_id not in (None, ""):
+                self._questionnaire_by_question.setdefault(
+                    str(question_id), str(questionnaire_id)
+                )
 
     def generate_assignment_report(
         self,

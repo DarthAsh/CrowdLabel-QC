@@ -305,7 +305,11 @@ def run_analysis(
     csv_path = _timestamped_tagging_report_csv_path(output_dir)
     report.export_to_csv(summary, csv_path)
 
-    pattern_report = PatternDetectionReport(assignments)
+    pattern_report = PatternDetectionReport(
+        assignments,
+        answers=list(domain_objects.get("answers", []) or []),
+        questions=list(domain_objects.get("questions", []) or []),
+    )
     assignment_patterns = pattern_report.generate_assignment_report(
         taggers, characteristics
     )
