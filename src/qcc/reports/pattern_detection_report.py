@@ -32,13 +32,9 @@ class PatternDetectionReport:
 
     def __init__(self, assignments: Sequence[TagAssignment]) -> None:
         self.assignments: List[TagAssignment] = list(assignments or [])
-        self._questionnaire_by_question: Dict[str, str] = {
-            str(getattr(assignment, "question_id")):
-            str(getattr(assignment, "questionnaire_id"))
-            for assignment in self.assignments
-            if getattr(assignment, "question_id", None) not in (None, "")
-            and getattr(assignment, "questionnaire_id", None) not in (None, "")
-        }
+        self._questionnaire_by_question: Dict[str, str] = (
+            self._build_questionnaire_map_for_assignment(self.assignments)
+        )
 
     def generate_assignment_report(
         self,
@@ -47,6 +43,11 @@ class PatternDetectionReport:
     ) -> Dict[str, object]:
         """Return pattern detection results for every assignment a user tagged."""
 
+        logger.info(
+            "Questionnaire map for assignment %s: %s",
+            self.TARGET_ASSIGNMENT_ID,
+            self._questionnaire_by_question,
+        )
         logger.info(
             "Starting pattern detection report generation for %s taggers and %s characteristics",
             len(taggers),
@@ -465,6 +466,24 @@ class PatternDetectionReport:
             self._questionnaire_tag_capacity(questionnaire_id)
             for questionnaire_id in comment_questionnaires.values()
         )
+
+    def _build_questionnaire_map_for_assignment(
+        self, assignments: Sequence[TagAssignment]
+    ) -> Dict[str, str]:
+        questionnaire_map: Dict[str, str] = {}
+
+        for assignment in assignments:
+            if str(getattr(assignment, "assignment_id", "")) != self.TARGET_ASSIGNMENT_ID:
+                continue
+
+            question_id = getattr(assignment, "question_id", None)
+            questionnaire_id = getattr(assignment, "questionnaire_id", None)
+            if question_id in (None, "") or questionnaire_id in (None, ""):
+                continue
+
+            questionnaire_map[str(question_id)] = str(questionnaire_id)
+
+        return questionnaire_map
 
     def _questionnaire_id_for_assignment(
         self, assignment: TagAssignment
