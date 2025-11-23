@@ -85,6 +85,7 @@ class PatternDetectionReport:
         rows = self._build_csv_rows(report_data)
         fieldnames = [
             "tagger_id",
+            "team_id",
             "assignment_id",
             "# Tags Available",
             "# Tags Set",
@@ -341,6 +342,7 @@ class PatternDetectionReport:
             pattern_str = ";".join(patterns) if patterns else ""
             row: MutableMapping[str, str] = {
                 "tagger_id": _stringify(assignment.get("tagger_id", "")),
+                "team_id": _stringify(assignment.get("team_id", "")),
                 "assignment_id": _stringify(assignment.get("assignment_id", "")),
                 "# Tags Available": _stringify(
                     assignment.get("# Tags Available", "")

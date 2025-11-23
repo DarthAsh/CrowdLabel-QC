@@ -83,6 +83,7 @@ def test_csv_export_writes_all_assignment_rows(tmp_path):
     assert all(row["has_repeating_pattern"] == "true" for row in reader)
     assert set(reader[0].keys()) == {
         "tagger_id",
+        "team_id",
         "assignment_id",
         "# Tags Available",
         "# Tags Set",
