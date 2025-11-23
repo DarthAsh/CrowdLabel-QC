@@ -43,6 +43,10 @@ class PatternDetectionReport:
     ) -> Dict[str, object]:
         """Return pattern detection results for every assignment a user tagged."""
 
+        print(
+            f"Questionnaire map for assignment {self.TARGET_ASSIGNMENT_ID}: "
+            f"{self._questionnaire_by_question}"
+        )
         logger.info(
             "Questionnaire map for assignment %s: %s",
             self.TARGET_ASSIGNMENT_ID,
