@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import logging
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set
 
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.enums import TagValue
@@ -489,4 +489,85 @@ class PatternDetectionReport:
             "comment_id": getattr(assignment, "comment_id", None),
             "characteristic_id": getattr(assignment, "characteristic_id", None),
         }
+
+
+def _questionnaire_and_questions_by_user(
+    connection, user_ids: Iterable[str]
+) -> tuple[Dict[str, str], Dict[str, Set[str]]]:
+    """Return questionnaire mapping and answered question IDs grouped by user.
+
+    The questionnaire map only contains questions tied to questionnaires 753 and 754.
+    The per-user map includes distinct questions answered for assignment 1205.
+    """
+
+    questionnaire_map: Dict[str, str] = {}
+    questions_by_user: Dict[str, Set[str]] = {}
+
+    with connection.cursor(dictionary=True) as cursor:
+        cursor.execute(
+            "SELECT id, questionnaire_id FROM questions WHERE questionnaire_id IN (753, 754)"
+        )
+        for row in cursor:
+            question_id = row.get("id")
+            questionnaire_id = row.get("questionnaire_id")
+            if question_id in (None, "") or questionnaire_id in (None, ""):
+                continue
+            questionnaire_map[str(question_id)] = str(questionnaire_id)
+
+    with connection.cursor() as cursor:
+        for user_id in user_ids:
+            cursor.execute(
+                """
+                SELECT DISTINCT a.question_id
+                FROM answers a
+                JOIN answer_tags t ON t.answer_id = a.id
+                WHERE t.assignment_id = 1205
+                AND t.tagger_id = %s
+                """,
+                (user_id,),
+            )
+            for question_id, in cursor:
+                if question_id in (None, ""):
+                    continue
+                questions_by_user.setdefault(str(user_id), set()).add(str(question_id))
+
+    return questionnaire_map, questions_by_user
+
+
+def _recalculate_csv_tag_availability(csv_path: Path, connection) -> None:
+    """Recalculate tag availability in-place using live database data."""
+
+    with csv_path.open(newline="", encoding="utf-8") as csv_file:
+        reader = csv.DictReader(csv_file)
+        fieldnames = reader.fieldnames or []
+        rows = list(reader)
+        user_ids = {row.get("tagger_id", "") for row in rows if row.get("tagger_id")}
+
+    questionnaire_map, questions_by_user = _questionnaire_and_questions_by_user(
+        connection, user_ids
+    )
+
+    for row in rows:
+        tagger_id = row.get("tagger_id", "")
+        question_ids = questions_by_user.get(tagger_id, set())
+        availability = sum(
+            PatternDetectionReport.QUESTIONNAIRE_TAG_CAPACITY.get(
+                questionnaire_map.get(question_id, ""), 0
+            )
+            for question_id in question_ids
+        )
+
+        logger.info(
+            "User %s questions %s -> availability %s",
+            tagger_id,
+            sorted(question_ids),
+            availability,
+        )
+
+        row["# Tags Available"] = str(availability)
+
+    with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
