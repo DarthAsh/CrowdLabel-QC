@@ -20,7 +20,7 @@ class ErrorCorrectingCodeStrategy:
     """Strategy template for ECC-based tagger reliability analysis.
 
     Attributes
-    ----------
+    
     tagassignments: list
         A list-like container of tag assignment objects the strategy will
         later operate on.
@@ -28,7 +28,7 @@ class ErrorCorrectingCodeStrategy:
         Optional ECC code matrix used for encoding/decoding tasks.
 
     Notes
-    -----
+    
     Methods are intentionally empty; this module provides the public
     method names and signatures that the metrics engine will call.
     """
@@ -49,12 +49,12 @@ class ErrorCorrectingCodeStrategy:
         """Placeholder for calculating Hamming distance between two codes.
 
         Parameters
-        ----------
+        
         code_a, code_b: List[int]
             Binary codewords to compare.
 
         Returns
-        -------
+        
         None
             TODO: implement to return integer Hamming distance.
         """

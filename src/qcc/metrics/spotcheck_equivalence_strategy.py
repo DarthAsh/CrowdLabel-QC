@@ -22,7 +22,7 @@ class SpotCheckEquivalenceStrategy:
     """Strategy template for Spot Check Equivalence (SCE) reliability.
 
     Attributes
-    ----------
+    
     tagassignments: list
         A list-like container of tag assignment objects the strategy will
         later operate on.
@@ -30,7 +30,7 @@ class SpotCheckEquivalenceStrategy:
         Optional configuration parameters for tuning the SCE behaviour.
 
     Notes
-    -----
+    
     This class is a placeholder. Each method below should be implemented
     later to perform pure, deterministic computations and return numeric
     or mapping results suitable for downstream aggregation.
@@ -43,12 +43,12 @@ class SpotCheckEquivalenceStrategy:
         """Placeholder for computing responsiveness of quality to effort.
 
         Parameters
-        ----------
+        
         tagger: Tagger
             The target tagger instance for which sensitivity is computed.
 
         Returns
-        -------
+        
         None
             TODO: implement to return a numeric sensitivity score.
         """
@@ -62,7 +62,7 @@ class SpotCheckEquivalenceStrategy:
         reported scores correlate with true quality signals.
 
         Returns
-        -------
+        
         None
             TODO: implement to return a numeric integrity measure.
         """
@@ -77,7 +77,7 @@ class SpotCheckEquivalenceStrategy:
         reliability measure per tagger.
 
         Returns
-        -------
+        
         None
             TODO: implement to return a normalized SCE numeric value.
         """
