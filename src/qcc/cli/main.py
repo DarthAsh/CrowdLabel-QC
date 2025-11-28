@@ -41,7 +41,7 @@ def main() -> int:
         log_path = setup_logging(config.logging, args.output)
 
         # Run the analysis
-        result = run_analysis(
+        result, mysql_config = run_analysis(
             input_path=args.input,
             output_dir=args.output,
             config=config
@@ -54,7 +54,7 @@ def main() -> int:
             result["log_file"] = str(log_path)
 
         # Write summary
-        write_summary(result, args.output)
+        write_summary(result, args.output, mysql_config=mysql_config)
 
         print(
             "Analysis completed successfully. Results saved to"
@@ -274,7 +274,7 @@ def run_analysis(
     input_path: Optional[Path],
     output_dir: Path,
     config: QCCConfig
-) -> dict:
+) -> Tuple[dict, Optional[MySQLConfig]]:
     """Run the quality control analysis.
     
     Args:
@@ -283,13 +283,16 @@ def run_analysis(
         config: Configuration settings
         
     Returns:
-        Dictionary containing analysis results
+        Tuple of the analysis results dictionary and the MySQL configuration used
+        for ingestion (if applicable)
     """
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Read input data
-    domain_objects, input_source = _read_domain_objects(input_path, config.input)
+    domain_objects, input_source, mysql_config = _read_domain_objects(
+        input_path, config.input
+    )
     
     assignments = list(domain_objects.get("assignments", []) or [])
     taggers = list(domain_objects.get("taggers", []) or [])
@@ -310,7 +313,9 @@ def run_analysis(
         taggers, characteristics
     )
     pattern_csv_path = _timestamped_pattern_report_csv_path(output_dir)
-    pattern_report.export_to_csv(assignment_patterns, pattern_csv_path)
+    pattern_report.export_to_csv(
+        assignment_patterns, pattern_csv_path, mysql_config=mysql_config
+    )
 
     result = {
         "input_source": input_source,
@@ -322,15 +327,18 @@ def run_analysis(
         "assignment_pattern_csv_path": str(pattern_csv_path),
     }
 
-    return result
+    return result, mysql_config
 
 
-def write_summary(result: dict, output_dir: Path) -> None:
+def write_summary(
+    result: dict, output_dir: Path, mysql_config: Optional[MySQLConfig] = None
+) -> None:
     """Write analysis summary to output directory.
-    
+
     Args:
         result: Analysis results dictionary
         output_dir: Directory to write the summary file
+        mysql_config: Optional MySQL configuration for enriching summary exports
     """
     summary_path = output_dir / "summary.json"
 
@@ -347,7 +355,9 @@ def write_summary(result: dict, output_dir: Path) -> None:
     if isinstance(pattern_data, Mapping):
         pattern_report = PatternDetectionReport([])
         csv_path = _resolve_pattern_report_csv_path(result, output_dir)
-        pattern_report.export_to_csv(pattern_data, csv_path)
+        pattern_report.export_to_csv(
+            pattern_data, csv_path, mysql_config=mysql_config
+        )
 
 
 def _resolve_tagging_report_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
@@ -381,7 +391,7 @@ def _timestamped_pattern_report_csv_path(output_dir: Path) -> Path:
 
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig
-) -> Tuple[dict, str]:
+) -> Tuple[dict, str, Optional[MySQLConfig]]:
     """Load domain objects based on the configured input format."""
 
     input_format = input_config.format.strip().lower()
@@ -394,13 +404,17 @@ def _read_domain_objects(
         if csv_path is None:
             raise ValueError("CSV input path must be provided via CLI or config")
         adapter = CSVAdapter()
-        return adapter.read_domain_objects(csv_path), str(csv_path)
+        return adapter.read_domain_objects(csv_path), str(csv_path), None
 
     if input_format == "mysql":
         mysql_config = _build_mysql_config(input_config)
         adapter = DBAdapter(mysql_config)
         source = input_config.mysql.dsn or mysql_config.host
-        return adapter.read_domain_objects_from_questionnaires(), source or "mysql"
+        return (
+            adapter.read_domain_objects_from_questionnaires(),
+            source or "mysql",
+            mysql_config,
+        )
 
     raise ValueError(f"Unsupported input format: {input_config.format}")
 

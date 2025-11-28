@@ -83,8 +83,19 @@ class PatternDetectionReport:
             },
         }
 
-    def export_to_csv(self, report_data: Mapping[str, object], output_path: Path) -> None:
-        """Export the per-assignment pattern results to CSV."""
+    def export_to_csv(
+        self,
+        report_data: Mapping[str, object],
+        output_path: Path,
+        mysql_config: MySQLConfig | None = None,
+    ) -> None:
+        """Export the per-assignment pattern results to CSV.
+
+        Args:
+            report_data: Assignment-level report data.
+            output_path: CSV destination.
+            mysql_config: Optional MySQL settings used to backfill assignment metadata.
+        """
 
         csv_path = Path(output_path)
         rows = self._build_csv_rows(report_data)
@@ -111,6 +122,9 @@ class PatternDetectionReport:
         logger.info(
             "Pattern detection CSV written to %s with %s rows", csv_path, len(rows)
         )
+
+        if mysql_config:
+            self._recalculate_csv_tag_availability(csv_path, mysql_config)
 
     def _build_horizontal_results(
         self, taggers: Sequence[Tagger], strategy: PatternSignalsStrategy

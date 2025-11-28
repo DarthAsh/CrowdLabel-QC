@@ -21,9 +21,12 @@ def test_read_domain_objects_prefers_questionnaire_root(monkeypatch):
         format="mysql", mysql=MySQLInputConfig(dsn="mysql://user:pass@db/qcc")
     )
 
-    domain_objects, source = main._read_domain_objects(None, input_config)
+    domain_objects, source, mysql_config = main._read_domain_objects(
+        None, input_config
+    )
 
     assert domain_objects == {"assignments": ["questionnaire-rooted"]}
     assert source == "mysql://user:pass@db/qcc"
     assert captured["limit"] is None
+    assert mysql_config is captured["config"]
     assert captured["config"].database == "qcc"
