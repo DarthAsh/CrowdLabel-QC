@@ -12,12 +12,16 @@ from urllib.parse import parse_qs, urlparse
 
 import yaml
 
-from qcc.config.schema import InputConfig, LoggingConfig, QCCConfig
+from qcc.config.schema import InputConfig, LoggingConfig, MySQLInputConfig, QCCConfig
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.io.csv_adapter import CSVAdapter
 from qcc.io.db_adapter import DBAdapter
 from qcc.reports.tagger_performance import TaggerPerformanceReport
 from qcc.reports.pattern_detection_report import PatternDetectionReport
+from report_fixer import fill_team_ids_and_tags
+
+
+logger = logging.getLogger(__name__)
 
 
 def main() -> int:
@@ -288,6 +292,8 @@ def run_analysis(
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    input_format = config.input.format.strip().lower()
+
     # Read input data
     domain_objects, input_source = _read_domain_objects(input_path, config.input)
     
@@ -312,6 +318,33 @@ def run_analysis(
     pattern_csv_path = _timestamped_pattern_report_csv_path(output_dir)
     pattern_report.export_to_csv(assignment_patterns, pattern_csv_path)
 
+    mysql_config, mysql_config_error = _build_mysql_config_for_reports(
+        config.input, input_format
+    )
+    pattern_fix_error = mysql_config_error
+    pattern_fix_applied = False
+
+    if mysql_config:
+        try:
+            fill_team_ids_and_tags(
+                pattern_csv_path,
+                host=mysql_config.host,
+                port=mysql_config.port,
+                user=mysql_config.user,
+                password=mysql_config.password,
+                database=mysql_config.database,
+                charset=mysql_config.charset,
+                use_pure=mysql_config.use_pure,
+            )
+            pattern_fix_applied = True
+        except Exception as exc:  # pragma: no cover - log unexpected failures
+            pattern_fix_error = str(exc)
+            logger.error(
+                "Failed to enrich pattern report with MySQL data: %s",
+                exc,
+                exc_info=True,
+            )
+
     result = {
         "input_source": input_source,
         "output_directory": str(output_dir),
@@ -321,6 +354,14 @@ def run_analysis(
         "assignment_pattern_report": assignment_patterns,
         "assignment_pattern_csv_path": str(pattern_csv_path),
     }
+
+    if mysql_config:
+        result["mysql_config"] = mysql_config.__dict__
+
+    if pattern_fix_error:
+        result["pattern_report_fix_error"] = pattern_fix_error
+    elif pattern_fix_applied:
+        result["pattern_report_fix_applied"] = True
 
     return result
 
@@ -490,6 +531,39 @@ def _build_mysql_config(input_config: InputConfig) -> MySQLConfig:
         charset=charset_value,
         use_pure=use_pure,
     )
+
+
+def _mysql_settings_available(settings: Optional[MySQLInputConfig]) -> bool:
+    if settings is None:
+        return False
+
+    return bool(
+        settings.dsn
+        or (
+            settings.host
+            and settings.user
+            and settings.password
+            and settings.database
+        )
+    )
+
+
+def _build_mysql_config_for_reports(
+    input_config: InputConfig, input_format: str
+) -> Tuple[Optional[MySQLConfig], Optional[str]]:
+    mysql_settings = input_config.mysql
+    if input_format == "mysql" or _mysql_settings_available(mysql_settings):
+        try:
+            return _build_mysql_config(input_config), None
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.warning(
+                "Unable to build MySQL configuration for pattern report fixes: %s",
+                exc,
+                exc_info=True,
+            )
+            return None, str(exc)
+
+    return None, None
 
 
 if __name__ == "__main__":
