@@ -128,7 +128,7 @@ def fill_team_ids_and_tags(csv_path, **mysql_kwargs):
             tags_cache[team_id] = total_tags
 
         df.at[idx, col_tags] = tags_cache[team_id]
-
+    df = df.iloc[:-1]
     # --- 4. Overwrite the original CSV ---
     df.to_csv(csv_path, index=False)
 
