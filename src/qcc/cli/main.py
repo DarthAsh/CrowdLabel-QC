@@ -55,8 +55,13 @@ def main() -> int:
             result["log_file"] = str(log_path)
 
         # Write summary
-        write_summary(result, args.output)
-
+        pattern_csv = write_summary(result, args.output)
+        print("Running team id and tags available fix for pattern_csv")
+        try:
+            fill_team_ids_and_tags(str(pattern_csv))
+            print("Fix applied successfully.")
+        except Exception as e:
+            print(f"Fix failed: {e}")
         print(
             "Analysis completed successfully. Results saved to"
             f" {args.output} (logs: {log_path})"
@@ -365,6 +370,7 @@ def write_summary(result: dict, output_dir: Path) -> None:
         pattern_report = PatternDetectionReport([])
         csv_path = _resolve_pattern_report_csv_path(result, output_dir)
         pattern_report.export_to_csv(pattern_data, csv_path)
+    return csv_path
 
 
 def _resolve_tagging_report_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
