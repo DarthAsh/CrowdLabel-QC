@@ -521,27 +521,46 @@ class PatternDetectionReport:
     def _assignment_team_map(cls, mysql_config: MySQLConfig) -> Dict[str, str]:
         """Return a mapping of tagger_id to team_id for the target assignment."""
 
-        query = """
-            SELECT v1.user_id AS tagger_id, v2.team_id AS team_id
+        tagger_query = """
+            SELECT DISTINCT v1.user_id AS tagger_id
             FROM view1 v1
-            INNER JOIN view2 v2
-                ON v1.user_id = v2.user_id
-               AND v1.assignment_id = v2.assignment_id
             WHERE v1.assignment_id = %s
+        """
+
+        team_lookup_query = """
+            SELECT team_id
+            FROM view2
+            WHERE assignment_id = %s
+              AND user_id = %s
+            LIMIT 1
         """
 
         tagger_team_map: Dict[str, str] = {}
         with mysql_connection(mysql_config) as connection:
             cursor = connection.cursor(dictionary=True)
             try:
-                cursor.execute(query, (cls.TARGET_ASSIGNMENT_ID,))
-                for row in cursor.fetchall():
-                    tagger_id = row.get("tagger_id")
-                    team_id = row.get("team_id")
-                    if tagger_id in (None, "") or team_id in (None, ""):
+                cursor.execute(tagger_query, (cls.TARGET_ASSIGNMENT_ID,))
+                tagger_ids = [row.get("tagger_id") for row in cursor.fetchall()]
+
+                for tagger_id in tagger_ids:
+                    if tagger_id in (None, ""):
                         logger.warning(
-                            "Missing team mapping data in assignment/team view row: %s",
-                            row,
+                            "Skipping blank tagger_id when looking up team mapping: %s",
+                            tagger_id,
+                        )
+                        continue
+
+                    cursor.execute(
+                        team_lookup_query,
+                        (cls.TARGET_ASSIGNMENT_ID, tagger_id),
+                    )
+                    team_row = cursor.fetchone()
+                    team_id = team_row.get("team_id") if team_row else None
+                    if team_id in (None, ""):
+                        logger.warning(
+                            "Missing team mapping data for tagger_id %s in assignment %s",
+                            tagger_id,
+                            cls.TARGET_ASSIGNMENT_ID,
                         )
                         continue
 
@@ -552,41 +571,64 @@ class PatternDetectionReport:
         return tagger_team_map
 
     @classmethod
-    def _team_review_answer_counts(cls, mysql_config: MySQLConfig) -> Dict[str, int]:
-        """Return review answer counts per team for the target assignment."""
+    def _team_tag_availability(
+        cls, mysql_config: MySQLConfig, team_ids: Iterable[str]
+    ) -> Dict[str, int]:
+        """Return tag availability per team for the target assignment."""
 
         query = """
-            SELECT rm.reviewee_id AS team_id, COUNT(a.id) AS answer_count
-            FROM response_maps rm
-            INNER JOIN responses r ON r.map_id = rm.id
-            INNER JOIN answers a ON a.response_id = r.id
-            WHERE rm.assignment_id = %s
-              AND r.is_submitted = 1
-              AND r.comments IS NOT NULL
-              AND TRIM(r.comments) <> ''
-              AND a.answer IS NOT NULL
-            GROUP BY rm.reviewee_id
+            WITH answered AS (
+              SELECT
+                a.id AS answer_id,
+                q.id AS question_id,
+                CASE q.questionnaire_id
+                  WHEN 753 THEN 2
+                  WHEN 754 THEN 1
+                  ELSE 0
+                END AS replaced_questionnaire_id
+              FROM response_maps rm
+              JOIN responses r ON rm.id = r.map_id
+              JOIN answers a ON r.id = a.response_id
+              JOIN questions q ON a.question_id = q.id
+              JOIN assignment_questionnaires aq ON aq.questionnaire_id = q.questionnaire_id
+              WHERE rm.reviewee_id = %s
+                AND r.is_submitted = 1
+                AND a.comments <> ''
+                AND aq.assignment_id = %s
+                AND q.type = 'Criterion'
+
+            )
+            SELECT
+              answer_id,
+              question_id,
+              replaced_questionnaire_id,
+              SUM(replaced_questionnaire_id) OVER () AS total_replaced_value
+            FROM answered
         """
 
-        answer_counts: Dict[str, int] = {}
+        availability: Dict[str, int] = {}
         with mysql_connection(mysql_config) as connection:
             cursor = connection.cursor(dictionary=True)
             try:
-                cursor.execute(query, (cls.TARGET_ASSIGNMENT_ID,))
-                for row in cursor.fetchall():
-                    team_id = row.get("team_id")
-                    count = row.get("answer_count")
+                for team_id in team_ids:
                     if team_id in (None, ""):
                         logger.warning(
-                            "Skipping review answer count row without team_id: %s", row
+                            "Skipping blank team_id when calculating tag availability"
                         )
                         continue
 
-                    answer_counts[str(team_id)] = int(count or 0)
+                    cursor.execute(
+                        query, (team_id, cls.TARGET_ASSIGNMENT_ID)
+                    )
+                    rows = cursor.fetchall()
+                    total_replaced_value = (
+                        rows[0].get("total_replaced_value") if rows else 0
+                    )
+                    availability[str(team_id)] = int(total_replaced_value or 0)
             finally:
                 cursor.close()
 
-        return answer_counts
+        return availability
 
     def _recalculate_csv_tag_availability(
         self, csv_path: Path, mysql_config: MySQLConfig
@@ -594,7 +636,9 @@ class PatternDetectionReport:
         """Recalculate tag availability in the CSV using review answer counts."""
 
         tagger_team_map = self._assignment_team_map(mysql_config)
-        team_answer_counts = self._team_review_answer_counts(mysql_config)
+        team_answer_counts = self._team_tag_availability(
+            mysql_config, set(tagger_team_map.values())
+        )
 
         with csv_path.open("r", newline="", encoding="utf-8") as csv_file:
             reader = csv.DictReader(csv_file)
