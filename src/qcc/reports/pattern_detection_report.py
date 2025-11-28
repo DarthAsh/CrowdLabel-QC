@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import csv
 import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
 
+import csv
 from qcc.domain.characteristic import Characteristic
 from qcc.domain.enums import TagValue
 from qcc.domain.tagassignment import TagAssignment
@@ -83,7 +83,12 @@ class PatternDetectionReport:
             },
         }
 
-    def export_to_csv(self, report_data: Mapping[str, object], output_path: Path) -> None:
+    def export_to_csv(
+        self,
+        report_data: Mapping[str, object],
+        output_path: Path,
+        mysql_config: Optional[MySQLConfig] = None,
+    ) -> None:
         """Export the per-assignment pattern results to CSV."""
 
         csv_path = Path(output_path)
@@ -111,6 +116,9 @@ class PatternDetectionReport:
         logger.info(
             "Pattern detection CSV written to %s with %s rows", csv_path, len(rows)
         )
+
+        if mysql_config is not None:
+            self._recalculate_csv_tag_availability(csv_path, mysql_config)
 
     def _build_horizontal_results(
         self, taggers: Sequence[Tagger], strategy: PatternSignalsStrategy
@@ -635,47 +643,76 @@ class PatternDetectionReport:
     ) -> None:
         """Recalculate tag availability in the CSV using review answer counts."""
 
+        import pandas as pd
+
         tagger_team_map = self._assignment_team_map(mysql_config)
         team_answer_counts = self._team_tag_availability(
             mysql_config, set(tagger_team_map.values())
         )
 
-        with csv_path.open("r", newline="", encoding="utf-8") as csv_file:
-            reader = csv.DictReader(csv_file)
-            fieldnames = list(reader.fieldnames or [])
-            if "team_id" not in fieldnames:
-                if "tagger_id" in fieldnames:
-                    insert_at = fieldnames.index("tagger_id") + 1
-                    fieldnames.insert(insert_at, "team_id")
-                else:
-                    fieldnames.append("team_id")
+        df = pd.read_csv(csv_path)
+        logger.info(
+            "Loaded CSV from %s with %s rows for team/tag availability backfill",
+            csv_path,
+            len(df),
+        )
 
-            rows: List[Dict[str, str]] = []
-            for row in reader:
-                tagger_id = row.get("tagger_id")
-                team_id = tagger_team_map.get(str(tagger_id)) if tagger_id else None
-                if team_id is None:
+        if "team_id" not in df.columns:
+            df.insert(1 if "tagger_id" in df.columns else len(df.columns), "team_id", "")
+            logger.info("team_id column missing in CSV; inserted blank column")
+
+        if "# Tags Available" not in df.columns:
+            df["# Tags Available"] = ""
+            logger.info("# Tags Available column missing in CSV; inserted blank column")
+
+        def _is_blank(value: object) -> bool:
+            if value is None:
+                return True
+            if isinstance(value, float) and pd.isna(value):
+                return True
+            return str(value).strip() == ""
+
+        for idx, row in df.iterrows():
+            tagger_id = row.get("tagger_id")
+            team_id = row.get("team_id") if not _is_blank(row.get("team_id")) else None
+
+            if team_id is None and not _is_blank(tagger_id):
+                team_id = tagger_team_map.get(str(tagger_id))
+                if team_id is not None:
+                    df.at[idx, "team_id"] = team_id
+                    logger.info(
+                        "Filled missing team_id for tagger %s with %s via view queries",
+                        tagger_id,
+                        team_id,
+                    )
+                else:
                     logger.warning(
-                        "No team mapping found for tagger_id %s in assignment %s",
+                        "Unable to find team_id for tagger %s in assignment %s",
                         tagger_id,
                         self.TARGET_ASSIGNMENT_ID,
                     )
 
-                availability = team_answer_counts.get(team_id, 0) if team_id else 0
-                logger.info(
-                    "Recalculated tag availability for tagger %s team %s: %s",
-                    tagger_id,
-                    team_id,
-                    availability,
+            availability_value = row.get("# Tags Available")
+            if _is_blank(availability_value):
+                team_lookup = df.at[idx, "team_id"] if not _is_blank(df.at[idx, "team_id"]) else None
+                availability = (
+                    team_answer_counts.get(str(team_lookup)) if team_lookup is not None else None
                 )
+                if availability is not None:
+                    df.at[idx, "# Tags Available"] = str(availability)
+                    logger.info(
+                        "Filled missing # Tags Available for tagger %s (team %s) with %s",
+                        tagger_id,
+                        team_lookup,
+                        availability,
+                    )
+                else:
+                    logger.warning(
+                        "Unable to compute # Tags Available for tagger %s (team %s)",
+                        tagger_id,
+                        team_lookup,
+                    )
 
-                row["team_id"] = team_id or ""
-                row["# Tags Available"] = str(availability)
-                rows.append(row)
-
-        with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
-            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-            writer.writeheader()
-            for row in rows:
-                writer.writerow(row)
+        df.to_csv(csv_path, index=False)
+        logger.info("Updated CSV written to %s after pandas backfill", csv_path)
 
