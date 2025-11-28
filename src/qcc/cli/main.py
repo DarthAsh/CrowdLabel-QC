@@ -17,6 +17,8 @@ from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.io.csv_adapter import CSVAdapter
 from qcc.io.db_adapter import DBAdapter
 from qcc.reports.tagger_performance import TaggerPerformanceReport
+from qcc.reports.pattern_detection_report import PatternDetectionReport
+from report_fixer import fill_team_ids_and_tags
 
 
 def main() -> int:
@@ -53,8 +55,13 @@ def main() -> int:
             result["log_file"] = str(log_path)
 
         # Write summary
-        write_summary(result, args.output)
-
+        pattern_csv = write_summary(result, args.output)
+        print("Running team id and tags available fix for pattern_csv")
+        try:
+            fill_team_ids_and_tags(str(pattern_csv))
+            print("Fix applied successfully.")
+        except Exception as e:
+            print(f"Fix failed: {e}")
         print(
             "Analysis completed successfully. Results saved to"
             f" {args.output} (logs: {log_path})"
@@ -304,12 +311,37 @@ def run_analysis(
     csv_path = _timestamped_tagging_report_csv_path(output_dir)
     report.export_to_csv(summary, csv_path)
 
+    pattern_report = PatternDetectionReport(assignments)
+    assignment_patterns = pattern_report.generate_assignment_report(
+        taggers, characteristics
+    )
+    pattern_csv_path = _timestamped_pattern_report_csv_path(output_dir)
+    pattern_report.export_to_csv(assignment_patterns, pattern_csv_path)
+
+    fixer_connection_kwargs = _pattern_report_fixer_connection_kwargs(config.input)
+    pattern_report_fix = {
+        "attempted": True,
+        "succeeded": True,
+        "error": None,
+        "connection_kwargs": fixer_connection_kwargs,
+    }
+
+    try:
+        fill_team_ids_and_tags(str(pattern_csv_path), **fixer_connection_kwargs)
+    except Exception as exc:  # pragma: no cover - exercised in integration
+        logging.exception("Failed to apply pattern report fixer")
+        pattern_report_fix["succeeded"] = False
+        pattern_report_fix["error"] = str(exc)
+
     result = {
         "input_source": input_source,
         "output_directory": str(output_dir),
         "config": config.dict(),
         "summary": summary,
         "tagging_report_csv_path": str(csv_path),
+        "assignment_pattern_report": assignment_patterns,
+        "assignment_pattern_csv_path": str(pattern_csv_path),
+        "pattern_report_fix": pattern_report_fix,
     }
 
     return result
@@ -333,6 +365,13 @@ def write_summary(result: dict, output_dir: Path) -> None:
         csv_path = _resolve_tagging_report_csv_path(result, output_dir)
         report.export_to_csv(summary_data, csv_path)
 
+    pattern_data = result.get("assignment_pattern_report") if isinstance(result, dict) else None
+    if isinstance(pattern_data, Mapping):
+        pattern_report = PatternDetectionReport([])
+        csv_path = _resolve_pattern_report_csv_path(result, output_dir)
+        pattern_report.export_to_csv(pattern_data, csv_path)
+    return csv_path
+
 
 def _resolve_tagging_report_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
     csv_path = None
@@ -344,9 +383,45 @@ def _resolve_tagging_report_csv_path(result: Mapping[str, object], output_dir: P
     return _timestamped_tagging_report_csv_path(output_dir)
 
 
+def _resolve_pattern_report_csv_path(result: Mapping[str, object], output_dir: Path) -> Path:
+    csv_path = None
+    if isinstance(result, Mapping):
+        csv_path = result.get("assignment_pattern_csv_path")
+    if isinstance(csv_path, str) and csv_path:
+        return Path(csv_path)
+
+    return _timestamped_pattern_report_csv_path(output_dir)
+
+
 def _timestamped_tagging_report_csv_path(output_dir: Path) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return output_dir / f"tagging-report-{timestamp}.csv"
+
+
+def _timestamped_pattern_report_csv_path(output_dir: Path) -> Path:
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return output_dir / f"pattern-detections-{timestamp}.csv"
+
+
+def _pattern_report_fixer_connection_kwargs(input_config: InputConfig) -> Dict[str, object]:
+    input_format = input_config.format.strip().lower()
+    if input_format != "mysql":
+        return {}
+
+    mysql_config = _build_mysql_config(input_config)
+    connection_kwargs: Dict[str, object] = {
+        "host": mysql_config.host,
+        "port": mysql_config.port,
+        "user": mysql_config.user,
+        "password": mysql_config.password,
+        "database": mysql_config.database,
+        "use_pure": mysql_config.use_pure,
+    }
+
+    if mysql_config.charset:
+        connection_kwargs["charset"] = mysql_config.charset
+
+    return connection_kwargs
 
 def _read_domain_objects(
     input_path: Optional[Path], input_config: InputConfig
@@ -369,7 +444,7 @@ def _read_domain_objects(
         mysql_config = _build_mysql_config(input_config)
         adapter = DBAdapter(mysql_config)
         source = input_config.mysql.dsn or mysql_config.host
-        return adapter.read_domain_objects(), source or "mysql"
+        return adapter.read_domain_objects_from_questionnaires(), source or "mysql"
 
     raise ValueError(f"Unsupported input format: {input_config.format}")
 
