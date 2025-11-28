@@ -9,7 +9,7 @@ def is_empty_val(v):
         (isinstance(v, str) and v.strip() == "")
     )
 
-def fill_team_ids_and_tags(csv_path):
+def fill_team_ids_and_tags(csv_path, **mysql_kwargs):
     # --------------------------------------------
     # Hard-coded DB connection from:
     # mysql://root@root:3306/quality_control
@@ -19,13 +19,16 @@ def fill_team_ids_and_tags(csv_path):
     #   port     = 3306
     #   db       = quality_control
     # --------------------------------------------
-    conn = mysql.connector.connect(
-        host="localhost",
-        port=3306,
-        user="root",
-        password="root",
-        database="quality_control",
-    )
+    conn_params = {
+        "host": "localhost",
+        "port": 3306,
+        "user": "root",
+        "password": "root",
+        "database": "quality_control",
+    }
+    conn_params.update({k: v for k, v in mysql_kwargs.items() if v is not None})
+
+    conn = mysql.connector.connect(**conn_params)
     cursor = conn.cursor()
 
     # --- 1. Read CSV ---
