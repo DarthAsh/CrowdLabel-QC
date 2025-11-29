@@ -137,3 +137,35 @@ def alpha_for_item(assignments: List[TagAssignment], characteristic: Characteris
 
     metrics = AgreementMetrics()
     return metrics.krippendorffs_alpha(assignments, characteristic)
+
+def weighted_agreement(
+    assignments: List[TagAssignment],
+    target_value: TagValue,
+    reliability_lookup: Dict[str, float],
+) -> Optional[float]:
+    """Weighted agreement for a particular tag value (e.g., YES).
+
+    Computes the sum of reliabilities for taggers who chose the target_value,
+    divided by the sum of reliabilities for all taggers in the assignments.
+    """
+    numer = 0.0 # Sum of reliabilities for taggers who chose the target_value
+    denom = 0.0 # Sum of reliabilities for all taggers
+
+    # The assignments list must be the latest/clean assignments for a single (comment, characteristic)
+    for a in assignments:
+        # Get reliability score, default to 0.0 if tagger not in lookup
+        # Assumes TagAssignment.tagger has an 'id' attribute, and that the ID is a string.
+        tagger_id = str(a.tagger_id) # Using a.tagger_id based on a.tagger_id in TagAssignment
+        r = reliability_lookup.get(tagger_id, 0.0)
+        
+        # Only include taggers with non-zero reliability
+        if r > 0.0:
+            denom += r
+            if a.value == target_value:
+                numer += r
+
+    if denom == 0.0:
+        return None
+    
+    # Tag quality is the weighted proportion of agreements on the target_value
+    return numer / denom
