@@ -3,14 +3,15 @@ from __future__ import annotations
 """Spot Check Equivalence (SCE) strategy skeleton.
 
 This module provides a strategy class used to assess tagger reliability
-via a spot-check equivalence approach. It is intentionally a skeleton:
-methods are placeholders with clear TODO markers and do not implement any
-algorithmic logic. The concrete implementations will be added when the
-metrics engine integrates these strategies.
+via a spot-check equivalence approach.
+
+This version defines clear method signatures and return types and
+raises NotImplementedError in metric methods so callers fail loudly
+until concrete algorithms are implemented.
 
 Constraints:
 - Only uses dataclasses and typing imports.
-- Methods contain no computation and only `pass` with TODO comments.
+- Methods perform no heavy computation yet.
 """
 
 from dataclasses import dataclass
@@ -23,72 +24,107 @@ class SpotCheckEquivalenceStrategy:
 
     Attributes
     
-    tagassignments: list
+    tagassignments:
         A list-like container of tag assignment objects the strategy will
-        later operate on.
-    config: Optional[dict]
-        Optional configuration parameters for tuning the SCE behaviour.
-
-    Notes
-    
-    This class is a placeholder. Each method below should be implemented
-    later to perform pure, deterministic computations and return numeric
-    or mapping results suitable for downstream aggregation.
+        later operate on. TagAssignment is expected to at least expose
+        a `tagger` attribute.
+    config:
+        Optional configuration parameters for tuning the SCE behaviour
+        (e.g., weights for sensitivity vs. measurement integrity).
     """
 
     tagassignments: List[Any]
     config: Optional[Dict[str, Any]] = None
 
-    def sensitivity(self, tagger: "Any") -> None:
-        """Placeholder for computing responsiveness of quality to effort.
+    #  Core metrics 
+
+    def sensitivity(self, tagger: Any) -> float:
+        """Compute responsiveness of a tagger's score to changes in effort.
 
         Parameters
         
-        tagger: Tagger
-            The target tagger instance for which sensitivity is computed.
+        tagger:
+            The tagger instance for which sensitivity is computed.
 
         Returns
+        --
+        float
+            A numeric sensitivity score. Higher should mean that small
+            changes in (implicit) effort would noticeably change the
+            tagger's score.
+
+        Notes
         
-        None
-            TODO: implement to return a numeric sensitivity score.
+        This is a placeholder. The concrete implementation should be
+        pure and deterministic: no I/O, DB access, or global state.
         """
-        # TODO: implement sensitivity calculation
-        pass
+        raise NotImplementedError("SpotCheckEquivalenceStrategy.sensitivity() is not implemented yet.")
 
-    def measurement_integrity(self, tagger: "Any") -> None:
-        """Placeholder for measuring correlation of score and quality.
+    def measurement_integrity(self, tagger: Any) -> float:
+        """Measure correlation between tagger scores and inferred quality.
 
-        This should later compute a statistic that indicates whether the
-        reported scores correlate with true quality signals.
+        This is where a real implementation would compute a statistic
+        analogous to Measurement Integrity (e.g., correlation between
+        the tagger's score and some quality signal such as agreement).
+
+        Parameters
+        
+        tagger:
+            The tagger instance being evaluated.
 
         Returns
-        
-        None
-            TODO: implement to return a numeric integrity measure.
+        --
+        float
+            A numeric integrity measure, typically in [0, 1], where
+            higher values indicate stronger alignment between the
+            tagger's scores and inferred quality.
         """
-        # TODO: implement measurement integrity computation
-        pass
+        raise NotImplementedError("SpotCheckEquivalenceStrategy.measurement_integrity() is not implemented yet.")
 
-    def spot_check_equivalence(self, tagger: "Any") -> None:
-        """Placeholder for combining metrics into a normalized SCE value.
+    def spot_check_equivalence(self, tagger: Any) -> float:
+        """Combine underlying metrics into a normalized SCE value.
 
-        The final SCE score should combine sensitivity and measurement
-        integrity (and possibly other factors) into a single normalized
-        reliability measure per tagger.
+        In a full implementation, this would map the tagger's metrics
+        (sensitivity, measurement integrity, etc.) to an equivalent
+        spot-checking ratio (e.g., 'this tagger behaves like X% of
+        their work was spot-checked against ground truth').
+
+        Parameters
+        
+        tagger:
+            The tagger instance being evaluated.
 
         Returns
+        --
+        float
+            A normalized SCE score, e.g., a pseudo spot-checking ratio
+            in the range [0.0, 1.0].
+        """
+        raise NotImplementedError("SpotCheckEquivalenceStrategy.spot_check_equivalence() is not implemented yet.")
+
+    #  Aggregation / reporting 
+
+    def summary_report(self) -> Dict[Any, Dict[str, float]]:
+        """Summarize SCE-related metrics for all taggers in tagassignments.
+
+        Returns
+        --
+        dict
+            A mapping from tagger identifier (or tagger object) to a
+            small dict of metric names and values, e.g.:
+
+            {
+                tagger_id_1: {
+                    "sensitivity": 0.42,
+                    "measurement_integrity": 0.81,
+                    "sce": 0.27,
+                },
+                ...
+            }
+
+        Notes
         
-        None
-            TODO: implement to return a normalized SCE numeric value.
+        This method is designed for downstream reporting. It should
+        remain pure/deterministic once the metric methods are defined.
         """
-        # TODO: implement spot check equivalence aggregation
-        pass
-
-    def summary_report(self) -> None:
-        """Placeholder to summarize tagger_id -> SCE score mapping.
-
-        Should later return a mapping from tagger identifiers to their
-        computed SCE scores and any meta-information useful for reports.
-        """
-        # TODO: implement summary report generation
-        pass
+        raise NotImplementedError("SpotCheckEquivalenceStrategy.summary_report() is not implemented yet.")
