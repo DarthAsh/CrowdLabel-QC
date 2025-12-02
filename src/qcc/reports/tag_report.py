@@ -95,7 +95,6 @@ class TagMetricsReport:
         taggers = self.taggers_who_touched_comment(assignments)
         if len(taggers) < 2:
             return None
-        # TODO: this method does not have the functionality to group by comment and characteristic
         # it seems that the assumption is that the input tag assignments will belong to one tag (one comment and characteristic)
         # 
 
@@ -164,26 +163,26 @@ class TagMetricsReport:
         return dict(groups)
 
 
-def group_by_comment(assignments: List[TagAssignment]) -> Dict[str, List[TagAssignment]]:
-    """Group assignments by comment_id (string key).
+# def group_by_comment(assignments: List[TagAssignment]) -> Dict[str, List[TagAssignment]]:
+#     """Group assignments by comment_id (string key).
 
-    This function focuses on IDs only — it will look for a ``comment_id``
-    attribute on the assignment and fall back to an enriched ``comment.id``
-    when available. Assignments missing any comment id are skipped.
-    """
+#     This function focuses on IDs only — it will look for a ``comment_id``
+#     attribute on the assignment and fall back to an enriched ``comment.id``
+#     when available. Assignments missing any comment id are skipped.
+#     """
 
-    groups: Dict[str, List[TagAssignment]] = defaultdict(list)
+#     groups: Dict[str, List[TagAssignment]] = defaultdict(list)
 
-    for assignment in assignments or []:
-        cid = getattr(assignment, "comment_id", None)
-        if cid is None:
-            comment_obj = getattr(assignment, "comment", None)
-            cid = getattr(comment_obj, "id", None) if comment_obj is not None else None
-        if cid is None:
-            continue
-        groups[str(cid)].append(assignment)
+#     for assignment in assignments or []:
+#         cid = getattr(assignment, "comment_id", None)
+#         if cid is None:
+#             comment_obj = getattr(assignment, "comment", None)
+#             cid = getattr(comment_obj, "id", None) if comment_obj is not None else None
+#         if cid is None:
+#             continue
+#         groups[str(cid)].append(assignment)
 
-    return dict(groups)
+#     return dict(groups)
 
 
 
