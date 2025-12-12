@@ -137,3 +137,26 @@ def alpha_for_item(assignments: List[TagAssignment], characteristic: Characteris
 
     metrics = AgreementMetrics()
     return metrics.krippendorffs_alpha(assignments, characteristic)
+
+def weighted_agreement(
+    assignments: List[TagAssignment],
+    target_value: TagValue,
+    reliability_lookup: Dict[str, float],
+) -> Optional[float]:
+    """Weighted agreement for a particular tag value (e.g., YES)."""
+    numer = 0.0
+    denom = 0.0
+    for a in assignments:
+        # ✅ FIX: Access the ID directly using the set attribute
+        tagger_id = str(a.tagger_id) 
+        
+        r = reliability_lookup.get(tagger_id, 0.0)
+        
+        if r > 0.0:
+            denom += r
+            if a.value == target_value:
+                numer += r
+
+    if denom == 0.0:
+        return None
+    return numer / denom
