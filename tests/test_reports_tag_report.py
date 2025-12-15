@@ -9,7 +9,6 @@ from qcc.reports.tag_report import (
     taggers_who_touched_comment,
     count_yes_no,
     alpha_for_item,
-    TagReportRow,
 )
 from qcc.domain.comment import Comment
 from qcc.domain.characteristic import Characteristic
