@@ -16,8 +16,8 @@ from qcc.config.schema import InputConfig, LoggingConfig, QCCConfig
 from qcc.data_ingestion.mysql_config import MySQLConfig
 from qcc.io.csv_adapter import CSVAdapter
 from qcc.io.db_adapter import DBAdapter
-from qcc.reports.tagger_performance import TaggerPerformanceReport
-from qcc.reports.pattern_detection_report import PatternDetectionReport
+from qcc.reports.tagger_reports.tagger_performance import TaggerPerformanceReport
+from qcc.reports.tagger_reports.pattern_detection_report import PatternDetectionReport
 from report_fixer import fill_team_ids_and_tags
 
 

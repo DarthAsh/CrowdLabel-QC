@@ -14,7 +14,7 @@ from qcc.domain.characteristic import Characteristic
 from qcc.domain.comment import Comment
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
-from qcc.reports.tagger_performance import TaggerPerformanceReport
+from qcc.reports.tagger_reports.tagger_performance import TaggerPerformanceReport
 
 
 class FakeImporter:

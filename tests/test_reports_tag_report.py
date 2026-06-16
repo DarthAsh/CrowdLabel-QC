@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from datetime import datetime
 
-from qcc.reports.tag_report import (
+from qcc.reports.tagger_reports.tag_report import (
     group_by_comment,
     group_by_comment_and_characteristic,
     taggers_who_touched_comment,

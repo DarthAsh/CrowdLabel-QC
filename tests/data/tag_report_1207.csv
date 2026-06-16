@@ -1,0 +1,1 @@
+comment_id,characteristic_id,num_taggers_could_set,num_yes,num_no,num_skipped,cohens_kappa,krippendorffs_alpha,aggregate_tagger_reliability,tag_reliability_yes,tag_reliability_no

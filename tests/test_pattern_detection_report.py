@@ -8,7 +8,7 @@ from qcc.domain.characteristic import Characteristic
 from qcc.domain.enums import TagValue
 from qcc.domain.tagassignment import TagAssignment
 from qcc.domain.tagger import Tagger
-from qcc.reports.pattern_detection_report import PatternDetectionReport
+from qcc.reports.tagger_reports.pattern_detection_report import PatternDetectionReport
 
 
 def _build_uniform_yes_assignments(
